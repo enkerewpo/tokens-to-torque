@@ -230,7 +230,7 @@ $$
 ```bash
 sudo docker exec -it -w "$PWD" t2t bash    # 容器内外同路径，进去还在当前目录
 cd days/day00_lora-quickstart
-bash code/setup_env.sh          # 装 pin 好的 trl/peft/transformers，每个容器跑一次就够
+bash code/setup_env.sh          # 装依赖，几分钟；中途别 Ctrl+C，装一半会留下缺包的环境
 ```
 
 **下面所有命令都在容器里、在这个目录下敲。** 宿主机上没有 torch/peft/trl，在外面跑会 `ModuleNotFoundError`。

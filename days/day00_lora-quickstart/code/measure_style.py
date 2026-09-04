@@ -7,7 +7,13 @@
 import argparse, json, re
 
 import torch
-from peft import PeftModel
+import sys
+
+try:
+    from peft import PeftModel
+except ModuleNotFoundError:
+    sys.exit("缺少 peft。依赖装在容器里，先跑一次：bash code/setup_env.sh"
+             "（几分钟，别中断）。已经在容器里的话，说明上次装到一半退出了，重跑即可。")
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 MARKS = {"～": re.compile("～"),
