@@ -253,6 +253,14 @@ python code/compare.py \
     --out results/before_after.md
 ```
 
+### 3.5 和它聊天
+
+```bash
+python code/chat.py --model <同一个模型> --adapter private/adapter
+```
+
+流式输出、多轮记忆、已关 thinking。`/base` 切到原模型、`/lora` 切回 adapter，同一个问题两边各问一遍最能看出差别；`/reset` 清空对话，`/quit` 退出。
+
 ## 4. 结果
 
 Jetson AGX Thor（120 W），Qwen3.5-9B bf16，LoRA r=16、α=32、`all-linear`，lr 2e-4 cosine、3 步 warmup，batch 4 × 累积 2，2 epoch，189 条样本。
