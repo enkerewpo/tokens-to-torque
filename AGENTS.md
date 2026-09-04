@@ -116,7 +116,7 @@ bash common/jetson_stop.sh '<进程正则>'               # 要停的时候
 本地预览：
 
 ```bash
-python scripts/build_docs.py && quarto preview site_src
+scripts/preview.sh   # http://localhost:4200，改根目录 md 后重跑 build_docs.py
 ```
 
 **写数学：** 行内 `$...$`，行间 `$$...$$`。**行间公式如果在列表项里，必须缩进 4 空格**，否则会终止列表——这是 markdown 的规则，换任何框架都一样。中文和行内公式之间要留一个空格。
