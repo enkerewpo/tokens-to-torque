@@ -214,6 +214,63 @@ $$
 | 标准正交 | 两两内积 0、长度 1；$Q^{\top}Q=I$，方阵时 $Q^{-1}=Q^{\top}$ | — | SVD 里的 $U$、$V$ 是“旋转” |
 | 奇异值 $\sigma_i$ | $A$ 在各正交方向上的拉伸倍数，$\sqrt{\lambda_i(A^{\top}A)}$ | — | 非零个数 = 秩；衰减快 ⇒ 可低秩近似 |
 
+## A.12 秩分解定理与 SVD（Day 00 §2.2 的选读）
+
+跑通 LoRA 不需要这一节。它回答三个问题：为什么秩 $\le r$ 就一定能写成 $BA$；SVD 怎么给出一组显式的 $B$、$A$；“近似低秩”怎么用奇异值曲线量化。
+
+### A.12.1 秩分解定理
+
+::: {.callout-important title="定理（秩分解）"}
+对 $M\in\mathbb{R}^{m\times n}$，$\operatorname{rank}(M)\le r$ 当且仅当存在 $B\in\mathbb{R}^{m\times r}$、$A\in\mathbb{R}^{r\times n}$ 使 $M = BA$。
+:::
+
+**证明。**
+
+（$\Rightarrow$）设 $\operatorname{rank}(M)=k\le r$。取列空间的一组基 $\mathbf{b}_1,\dots,\mathbf{b}_k\in\mathbb{R}^m$，排成 $B_0=[\mathbf{b}_1\ \cdots\ \mathbf{b}_k]\in\mathbb{R}^{m\times k}$。$M$ 的第 $j$ 列 $\mathbf{m}_j$ 属于列空间，所以能唯一地写成基的线性组合：
+
+$$
+\mathbf{m}_j=\sum_{i=1}^{k} a_{ij}\,\mathbf{b}_i
+\qquad\Longleftrightarrow\qquad
+M = B_0 A_0,\quad A_0=(a_{ij})\in\mathbb{R}^{k\times n}
+$$
+
+若 $k<r$，给 $B_0$ 补 $r-k$ 个零列、给 $A_0$ 补 $r-k$ 个零行，得到 $B\in\mathbb{R}^{m\times r}$、$A\in\mathbb{R}^{r\times n}$，仍有 $M=BA$。
+
+（$\Leftarrow$）若 $M=BA$，则对任意 $\mathbf{x}$，$M\mathbf{x}=B(A\mathbf{x})\in\operatorname{col}(B)$，所以 $\operatorname{col}(M)\subseteq\operatorname{col}(B)$，于是 $\operatorname{rank}(M)\le\dim\operatorname{col}(B)\le r$（$B$ 只有 $r$ 列，列空间维数不可能超过 $r$）。$\blacksquare$
+
+所以 Day 00 §2.2 那句“任何秩 $\le r$ 的矩阵都能写成 $BA$”就是这个定理。分解不唯一（对任意可逆 $G\in\mathbb{R}^{r\times r}$，$(BG)(G^{-1}A)$ 也是一组），但训练只需要存在性。
+
+### A.12.2 SVD 给出显式分解；「近似低秩」怎么量化
+
+上面的证明是存在性的。**奇异值分解**（A.9–A.10）给出一个具体构造：任意 $M$ 可写成 $M=U\Sigma V^{\top}$，其中 $\Sigma$ 的对角线是奇异值 $\sigma_1\ge\sigma_2\ge\cdots\ge 0$，非零奇异值的个数恰好等于 $\operatorname{rank}(M)$[^strang]。取前 $r$ 个：
+
+$$
+M_r = U_r\,\Sigma_r\,V_r^{\top},
+\qquad
+B = U_r\Sigma_r\in\mathbb{R}^{m\times r},\quad
+A = V_r^{\top}\in\mathbb{R}^{r\times n}
+$$
+
+若 $\operatorname{rank}(M)\le r$，则 $M_r = M$，这就是一组显式的 $BA$。
+
+更重要的是 $\operatorname{rank}(M)>r$ 的情况。**Eckart–Young–Mirsky 定理**[^eckart]说：在所有秩 $\le r$ 的矩阵里，$M_r$ 是离 $M$ 最近的那个，且
+
+$$
+\min_{\operatorname{rank}(X)\le r}\ \|M-X\|_F \;=\; \|M-M_r\|_F \;=\; \sqrt{\textstyle\sum_{i>r}\sigma_i^2}
+$$
+
+这句话给了「近似低秩」一个可测的定义：**如果奇异值衰减得快，尾部 $\sum_{i>r}\sigma_i^2$ 就小，秩 $r$ 的近似就好。** 所以 LoRA 的假设可以被检验——把全参微调得到的 $\Delta W$ 做 SVD，看奇异值曲线。Day 31 会真的做这个实验。
+
+### A.12.3 $BA$ 的几何：修正量落在哪
+
+这一小节回答“$r=16$ 到底限制了什么”。注意：**下面说的都只关于修正支路 $\Delta W = BA$；主路 $W_0\mathbf{x}$ 照常看全部输入、写全部输出，LoRA 没有让模型忽略任何方向。** 回到 $\Delta W\mathbf{x} = B(A\mathbf{x})$，两端各有一个子空间：
+
+**输出端。** $B\in\mathbb{R}^{d_{\text{out}}\times 16}$ 只有 16 列，其列空间 $\operatorname{col}(B)$ 是 $\mathbb{R}^{d_{\text{out}}}=\mathbb{R}^{4096}$ 里一个维数 $\le 16$ 的子空间。由 2.2.2 的（$\Leftarrow$）方向，对**任何**输入 $\mathbf{x}$，修正量 $\Delta W\mathbf{x}$ 都落在这同一个子空间里。即：**不管输入是什么，修正支路只能往 16 个固定方向上改输出。**
+
+**输入端。** $A\in\mathbb{R}^{16\times d_{\text{in}}}$ 的零空间 $\operatorname{null}(A)=\{\mathbf{x}:A\mathbf{x}=\mathbf{0}\}$ 维数 $\ge d_{\text{in}}-16 = 4080$（秩–零化度定理[^strang]）。把 $\mathbf{x}$ 分解成行空间分量加零空间分量 $\mathbf{x}=\mathbf{x}_{\parallel}+\mathbf{x}_{\perp}$，则 $A\mathbf{x}=A\mathbf{x}_{\parallel}$：**修正支路对输入的 4080 个方向没有反应，只有落在 $A$ 的行空间（维数 $\le 16$）里的分量会产生修正。**
+
+所以 $r$ 是修正支路的宽度：它从输入里读 $r$ 个数，往输出里写 $r$ 个方向。
+
 ## 自测
 
 做完能答出这三题，§2.2 就没有障碍了：
@@ -226,4 +283,5 @@ $$
 <!-- 参考文献用脚注 [^key] 写在这里，站点会自动汇总到文末的「参考文献」区 -->
 
 [^eckart]: Eckart, C. & Young, G. "The approximation of one matrix by another of lower rank." *Psychometrika* 1(3):211–218, 1936.
+[^lora]: Hu, E. J. et al. "LoRA: Low-Rank Adaptation of Large Language Models." *ICLR* 2022. arXiv:2106.09685.
 [^strang]: Strang, G. *Introduction to Linear Algebra*, 5th ed. Wellesley-Cambridge Press, 2016. 线性组合与 $A\mathbf{x}$：§2.1；子空间与张成：§3.1；线性无关：§3.4；基、维数、秩、行秩=列秩：§3.5；零空间与秩–零化度：§3.6；内积与长度：§1.2；标准正交矩阵：§4.4；SVD：§7.1–7.2。中文可用清华大学出版社影印版；MIT OCW 18.06 是配套公开课。

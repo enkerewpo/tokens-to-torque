@@ -39,90 +39,26 @@ $$
 
 微调就是把这些 $W$ 改一改。记改动量为 $\Delta W$，最终权重是 $W + \Delta W$。
 
-### 2.2 为什么拆成 $A$ 和 $B$：秩
+### 2.2 LoRA 的参数化：$\Delta W = BA$
 
-全参微调直接学 $\Delta W$，那是每个矩阵 1678 万个自由参数。LoRA 的做法是把 $\Delta W$ 限制成 $BA$ 的形式。
-
-> [!TIP]
-> 下面会用到列空间、秩、基、零空间、秩–零化度定理。很久没碰线性代数的话，先看[附录 A · 线性代数速查](../../appendix/linear-algebra.md)，二十分钟，每个概念都有能手算的例子。要看懂这一步，需要三件事：**秩是什么**（定义）、**为什么秩 $\le r$ 的矩阵一定能写成 $BA$**（定理，可证）、以及**凭什么认为 $\Delta W$ 的秩很低**（经验发现，不是定理）。这三件事的性质不一样，下面分开说。
-
-#### 2.2.1 秩的定义
-
-矩阵 $M\in\mathbb{R}^{m\times n}$ 的**列空间**是它所有列向量张成的子空间：
+微调要学的是改动量 $\Delta W\in\mathbb{R}^{d_{\text{out}}\times d_{\text{in}}}$。全参微调把它的每个元素都当自由参数，每个矩阵 1678 万个。LoRA 论文 §4.1[^lora] 换了一种写法：
 
 $$
-\operatorname{col}(M) = \{\,M\mathbf{x} : \mathbf{x}\in\mathbb{R}^{n}\,\} \subseteq \mathbb{R}^{m}
-$$
-
-**秩**定义为列空间的维数：$\operatorname{rank}(M) = \dim \operatorname{col}(M)$。线性代数的一个基本定理是行秩等于列秩，所以也可以用行空间定义，结果一样[^strang]。
-
-直观上：$M$ 把整个 $\mathbb{R}^n$ 映到 $\mathbb{R}^m$，但**像**只填满了一个 $\operatorname{rank}(M)$ 维的子空间。$\mathbb{R}^{4096\times4096}$ 的矩阵秩最高 4096（像填满整个 $\mathbb{R}^{4096}$）；秩 16 意味着不管输入什么，输出永远落在同一个 16 维子空间里。
-
-#### 2.2.2 定理：秩分解
-
-> [!IMPORTANT]
-> **定理（秩分解）**
->
-> 对 $M\in\mathbb{R}^{m\times n}$，$\operatorname{rank}(M)\le r$ 当且仅当存在 $B\in\mathbb{R}^{m\times r}$、$A\in\mathbb{R}^{r\times n}$ 使 $M = BA$。
-
-**证明。**
-
-（$\Rightarrow$）设 $\operatorname{rank}(M)=k\le r$。取列空间的一组基 $\mathbf{b}_1,\dots,\mathbf{b}_k\in\mathbb{R}^m$，排成 $B_0=[\mathbf{b}_1\ \cdots\ \mathbf{b}_k]\in\mathbb{R}^{m\times k}$。$M$ 的第 $j$ 列 $\mathbf{m}_j$ 属于列空间，所以能唯一地写成基的线性组合：
-
-$$
-\mathbf{m}_j=\sum_{i=1}^{k} a_{ij}\,\mathbf{b}_i
-\qquad\Longleftrightarrow\qquad
-M = B_0 A_0,\quad A_0=(a_{ij})\in\mathbb{R}^{k\times n}
-$$
-
-若 $k<r$，给 $B_0$ 补 $r-k$ 个零列、给 $A_0$ 补 $r-k$ 个零行，得到 $B\in\mathbb{R}^{m\times r}$、$A\in\mathbb{R}^{r\times n}$，仍有 $M=BA$。
-
-（$\Leftarrow$）若 $M=BA$，则对任意 $\mathbf{x}$，$M\mathbf{x}=B(A\mathbf{x})\in\operatorname{col}(B)$，所以 $\operatorname{col}(M)\subseteq\operatorname{col}(B)$，于是 $\operatorname{rank}(M)\le\dim\operatorname{col}(B)\le r$（$B$ 只有 $r$ 列，列空间维数不可能超过 $r$）。$\blacksquare$
-
-所以「$\Delta W = BA$」**不是近似，是秩 $\le r$ 的等价刻画**：LoRA 把搜索范围从全体 $\mathbb{R}^{d_{\text{out}}\times d_{\text{in}}}$ 缩小到其中秩 $\le r$ 的那部分，而这部分恰好就是所有能写成 $BA$ 的矩阵。分解不唯一（对任意可逆 $G\in\mathbb{R}^{r\times r}$，$(BG)(G^{-1}A)$ 也是一组），但训练只需要存在性。
-
-#### 2.2.3 SVD：分解怎么构造，「近似低秩」是什么意思
-
-上面的证明是存在性的。**奇异值分解**（定义和构造见[附录 A.9–A.10](../../appendix/linear-algebra.md#a.9-长度正交标准正交)）给出一个具体构造：任意 $M$ 可写成 $M=U\Sigma V^{\top}$，其中 $\Sigma$ 的对角线是奇异值 $\sigma_1\ge\sigma_2\ge\cdots\ge 0$，非零奇异值的个数恰好等于 $\operatorname{rank}(M)$[^strang]。取前 $r$ 个：
-
-$$
-M_r = U_r\,\Sigma_r\,V_r^{\top},
+W = W_0 + \Delta W = W_0 + BA,
 \qquad
-B = U_r\Sigma_r\in\mathbb{R}^{m\times r},\quad
-A = V_r^{\top}\in\mathbb{R}^{r\times n}
+B\in\mathbb{R}^{d_{\text{out}}\times r},\quad
+A\in\mathbb{R}^{r\times d_{\text{in}}},\quad
+r\ll\min(d_{\text{in}},d_{\text{out}})
 $$
 
-若 $\operatorname{rank}(M)\le r$，则 $M_r = M$，这就是一组显式的 $BA$。
+$W_0$ 冻结不动，只训练 $A$ 和 $B$。前向变成 $\mathbf{y} = W_0\mathbf{x} + B(A\mathbf{x})$：原来那条路照常算，旁边多一条“先把 $\mathbf{x}$ 压到 $r$ 维、再展开回 $d_{\text{out}}$ 维”的支路，两条相加。
 
-更重要的是 $\operatorname{rank}(M)>r$ 的情况。**Eckart–Young–Mirsky 定理**[^eckart]说：在所有秩 $\le r$ 的矩阵里，$M_r$ 是离 $M$ 最近的那个，且
+**这样写的代价是什么。** 任何能写成 $BA$ 的矩阵，秩都不超过 $r$（$B$ 只有 $r$ 列，见[附录 A.8](../../appendix/linear-algebra.md#a.8-矩阵乘积与列空间的包含)）；反过来任何秩 $\le r$ 的矩阵也都能写成 $BA$（[附录 A.12](../../appendix/linear-algebra.md#a.12-秩分解定理与-svd)有证明）。所以 LoRA 做的事一句话：**把 $\Delta W$ 的搜索范围限制在秩 $\le r$ 的矩阵里。** 不是近似，是限制——它搜不到秩更高的解。
 
-$$
-\min_{\operatorname{rank}(X)\le r}\ \|M-X\|_F \;=\; \|M-M_r\|_F \;=\; \sqrt{\textstyle\sum_{i>r}\sigma_i^2}
-$$
+**凭什么这个限制不伤效果。** 这不是定理，是经验：Aghajanyan 等[^aghajanyan] 发现预训练模型微调时“有效的更新方向”远少于参数总数；LoRA 论文 §7 在 GPT-3 175B 上实测 $r=1,2$ 已接近 $r=64$。对一个新任务，$r$ 该取多少要自己测（day 31）。
 
-这句话给了「近似低秩」一个可测的定义：**如果奇异值衰减得快，尾部 $\sum_{i>r}\sigma_i^2$ 就小，秩 $r$ 的近似就好。** 所以 LoRA 的假设可以被检验——把全参微调得到的 $\Delta W$ 做 SVD，看奇异值曲线。day 31 会真的做这个实验。
-
-#### 2.2.4 「16 维子空间」到底是哪个空间的子空间
-
-回到 $\Delta W\mathbf{x} = B(A\mathbf{x})$，两端各有一个子空间：
-
-**输出端。** $B\in\mathbb{R}^{d_{\text{out}}\times 16}$ 只有 16 列，其列空间 $\operatorname{col}(B)$ 是 $\mathbb{R}^{d_{\text{out}}}=\mathbb{R}^{4096}$ 里一个维数 $\le 16$ 的子空间。由 2.2.2 的（$\Leftarrow$）方向，对**任何**输入 $\mathbf{x}$，修正量 $\Delta W\mathbf{x}$ 都落在这同一个子空间里。这就是「修正只能落在一个 16 维子空间」的确切含义：**不管输入是什么，模型只能往 16 个固定方向上改输出。**
-
-**输入端。** $A\in\mathbb{R}^{16\times d_{\text{in}}}$ 的零空间 $\operatorname{null}(A)=\{\mathbf{x}:A\mathbf{x}=\mathbf{0}\}$ 维数 $\ge d_{\text{in}}-16 = 4080$（秩–零化度定理[^strang]）。把 $\mathbf{x}$ 分解成行空间分量加零空间分量 $\mathbf{x}=\mathbf{x}_{\parallel}+\mathbf{x}_{\perp}$，则 $A\mathbf{x}=A\mathbf{x}_{\parallel}$：**输入的 4080 个方向被这次微调完全忽略，只有落在 $A$ 的行空间（维数 $\le 16$）里的分量才起作用。** 这就是「只看得见 16 个线性特征」的确切含义。
-
-所以 $r$ 是这次微调的信息瓶颈宽度：输入被压到 $r$ 个数，输出只能在 $r$ 个方向上动。
-
-#### 2.2.5 凭什么认为 $\Delta W$ 的秩很低——这是经验，不是定理
-
-上面说的都是数学事实。但**「微调的改动量 $\Delta W$ 可以用低秩矩阵很好地近似」不是定理**，没有任何证明说它对所有模型、所有任务成立。它是一个经验假设，依据来自两篇论文：
-
-- **Aghajanyan 等 2020**[^aghajanyan]：把预训练模型的微调限制在一个随机的低维子空间里（用随机投影把可训练参数压到 $d$ 维），发现 RoBERTa 在很多任务上 $d$ 只要几百就能达到全参微调 90% 的效果。这说明「有效的更新方向」远少于参数总数。
-- **Hu 等 2021（LoRA 论文）**[^lora]：直接把这个想法用到权重矩阵上。§7.2 的实验里，GPT-3 175B 上 $r=1$ 或 $2$ 就已经接近 $r=64$ 的效果；§7.3 分析不同 $r$ 学到的 $A$ 的奇异方向重叠度，发现前几个方向高度一致，说明有用的信息集中在很少的方向上。
-
-> [!CAUTION]
-> **LoRA 没有说 $\Delta W$ 真的是低秩的**
->
-> 它说的是：把搜索空间限制到秩 $\le r$，在实验里效果没掉多少。这和「全参微调得到的 $\Delta W$ 本身就是低秩的」是两回事——后者在 Hu 等的 §7 里有部分证据，但也有后续工作（如 Lialin 等 2023[^relora]）指出预训练本身的更新不是低秩的，LoRA 的适用范围主要是微调。所以对新任务，$r$ 该取多少要自己测，这就是 day 31 的内容。
+> [!NOTE]
+> 想知道“为什么秩 $\le r$ 就一定能拆成 $BA$”、SVD 怎么给出显式分解、以及“近似低秩”怎么用奇异值曲线量化，看[附录 A.12](../../appendix/linear-algebra.md#a.12-秩分解定理与-svd)。跑通 LoRA 不需要那些；day 31 做 $\Delta W$ 的 SVD 实验时会用到。
 ### 2.3 参数量：省在哪，什么时候不省
 
 | | 参数量 | $4096\times4096,\ r=16$ |
@@ -150,33 +86,49 @@ $$
 
 ### 2.4 真正省的是优化器状态
 
-参数省 99% 只是表面，**显存大头在训练状态**。
+参数量省 99% 只是表面，**训练时显存的大头不是参数，是每个可训练参数背后跟着的一堆状态。** 先说清这堆状态是什么。
 
-设可训练参数量为 $N$。用 AdamW + bf16 权重 + fp32 优化器状态，每个**可训练**参数要存：
+**AdamW 每个参数要存两个动量。** AdamW[^adam] 的更新不是直接用梯度 $g_t$，而是用梯度的两个指数滑动平均：
 
 $$
-\underbrace{2}_{\text{bf16 梯度}}
-+\underbrace{4}_{m}
-+\underbrace{4}_{v}
-+\underbrace{4}_{\text{fp32 master}}
-= 14\ \text{bytes}
+m_t = \beta_1 m_{t-1} + (1-\beta_1)\,g_t,
+\qquad
+v_t = \beta_2 v_{t-1} + (1-\beta_2)\,g_t^2,
+\qquad
+\theta_t = \theta_{t-1} - \eta\,\frac{m_t}{\sqrt{v_t}+\epsilon}
 $$
 
-冻结的参数这四项**一项都不需要**。对 9B 模型：
+$m$ 是梯度的平均（方向），$v$ 是梯度平方的平均（尺度）。它们是**逐参数**的：每个参数都有自己的 $m$ 和 $v$，训练全程保留，所以模型有多少可训练参数，就要多存两倍这么多的数。
 
-| | 全参微调 $N=9\times10^9$ | LoRA $N\approx 2\times10^7$ |
+**混合精度还要一份 fp32 主副本。** 前向反向用 bf16 算得快，但 bf16 只有 8 位尾数，一次更新 $\eta\,m/\sqrt v$ 常常小到加到 bf16 权重上直接被舍入成零。标准做法（ZeRO 论文 §3[^zero]）是另存一份 fp32 的“master weights”，更新在 fp32 上做，再转成 bf16 用于下一轮前向。
+
+把这些加起来，**每个可训练参数**要占：
+
+| 存什么 | 精度 | 字节 |
 |---|---|---|
-| 权重（bf16，都要） | 18 GB | 18 GB |
-| 梯度 + Adam $m,v$ + master | $9\times10^9\times14 \approx$ **126 GB** | $2\times10^7\times14\approx$ **0.28 GB** |
-| **合计（不含激活）** | **~144 GB** | **~18.3 GB** |
+| 权重（前向用） | bf16 | 2 |
+| 梯度 | bf16 | 2 |
+| fp32 主副本 | fp32 | 4 |
+| Adam $m$ | fp32 | 4 |
+| Adam $v$ | fp32 | 4 |
+| **合计** | | **16** |
 
-一块 128 GB 统一内存的 Jetson AGX Thor 可用约 115 GB ——**全参微调 9B 直接放不下，LoRA 剩一大半空间留给激活值。** 24 GB 的独显更是只有 LoRA 或 QLoRA 一条路。这才是 LoRA 的真正意义：$W$ 冻结 $\Rightarrow$ 没有梯度、没有动量、没有 master copy。
+而**冻结的参数**只需要第一行：2 字节。梯度不算、动量不存、主副本不要。
+
+对 9B 模型，可训练参数 $N$：
+
+| | 全参微调 $N = 9\times10^9$ | LoRA $N\approx2\times10^7$ |
+|---|---|---|
+| 冻结参数 × 2 B | 0 | $9\times10^9\times2$ = 18 GB |
+| 可训练参数 × 16 B | $9\times10^9\times16$ = **144 GB** | $2\times10^7\times16$ = 0.3 GB |
+| **合计（不含激活值）** | **~144 GB** | **~18.3 GB** |
+
+一块 128 GB 统一内存的 Jetson AGX Thor 可用约 115 GB——**全参微调 9B 放不下，LoRA 剩一大半空间给激活值。** 24 GB 独显更是只有 LoRA/QLoRA 一条路。这才是 LoRA 的真正意义：$W_0$ 冻结 $\Rightarrow$ 它不需要梯度、动量、主副本。
 
 > [!CAUTION]
 > **一个常见误解**
 >
 > **LoRA 不减少反向传播的计算量。** 梯度仍然要穿过整个网络才能流到 $A$、$B$，中间激活值照样要存。所以 `gradient_checkpointing` 该开还得开。省的是**状态**，不是**算力**。
-
 ### 2.5 两个必须知道的实现细节
 
 **初始化必须一零一随机**：$A\sim\mathcal{N}(0,\sigma^2)$，$B = 0$。
@@ -333,8 +285,8 @@ python code/compare.py \
 
 <!-- 参考文献用脚注 [^key] 写在这里，站点会自动汇总到文末的「参考文献」区 -->
 
+[^adam]: Loshchilov, I. & Hutter, F. "Decoupled Weight Decay Regularization." *ICLR* 2019. arXiv:1711.05101（AdamW；Adam 本身见 Kingma & Ba, *ICLR* 2015, arXiv:1412.6980）。
+[^zero]: Rajbhandari, S. et al. "ZeRO: Memory Optimizations Toward Training Trillion Parameter Models." *SC* 2020. arXiv:1910.02054. §3 的混合精度 Adam 内存账：每参数 16 字节。
 [^strang]: Strang, G. *Introduction to Linear Algebra*, 5th ed. Wellesley-Cambridge Press, 2016. 行秩等于列秩：§3.5；秩–零化度定理：§3.6；SVD 与秩：§7.1。
-[^eckart]: Eckart, C. & Young, G. "The approximation of one matrix by another of lower rank." *Psychometrika* 1(3):211–218, 1936. Frobenius 范数下的最优低秩近似；Mirsky 1960 推广到所有酉不变范数。
 [^aghajanyan]: Aghajanyan, A., Zettlemoyer, L. & Gupta, S. "Intrinsic Dimensionality Explains the Effectiveness of Language Model Fine-Tuning." *ACL* 2021. arXiv:2012.13255.
 [^lora]: Hu, E. J. et al. "LoRA: Low-Rank Adaptation of Large Language Models." *ICLR* 2022. arXiv:2106.09685. 低秩假设的实验证据在 §7。
-[^relora]: Lialin, V. et al. "ReLoRA: High-Rank Training Through Low-Rank Updates." 2023. arXiv:2307.05695. 指出单次低秩更新不足以做预训练，需要多次叠加。
