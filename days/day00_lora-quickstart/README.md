@@ -60,7 +60,17 @@ A\in\mathbb{R}^{r\times d_{\text{in}}},\quad
 r\ll\min(d_{\text{in}},d_{\text{out}})
 $$
 
-$W_0$ 冻结不动，只训练 $A$ 和 $B$。前向变成 $\mathbf{y} = W_0\mathbf{x} + B(A\mathbf{x})$：原来那条路照常算，旁边多一条“先把 $\mathbf{x}$ 压到 $r$ 维、再展开回 $d_{\text{out}}$ 维”的支路，两条相加。
+![](../../site_src/assets/fig-lora-arch-light.svg){.fig .light-content fig-alt="LoRA 在一个线性层里的结构"}
+![](../../site_src/assets/fig-lora-arch-dark.svg){.fig .dark-content fig-alt="LoRA 在一个线性层里的结构"}
+
+$W_0$ 冻结不动，只训练 $A$ 和 $B$。前向变成 $\mathbf{y} = W_0\mathbf{x} + \frac{\alpha}{r}B(A\mathbf{x})$：原来那条路照常算，旁边多一条“先把 $\mathbf{x}$ 压到 $r$ 维、再展开回 $d_{\text{out}}$ 维”的支路，两条相加。两路输出都是 $d_{\text{out}}$ 维，所以能逐元素相加。$\alpha/r$ 是缩放约定，§2.5 会讲。
+
+| | 参数量 | 训练时每参数占 |
+|---|---|---|
+| $W_0$ 冻结 | $4096^2$ = 16.8 M | 2 字节（只存权重） |
+| $A$ + $B$ 可训练 | $r(d_{\text{in}}+d_{\text{out}})$ = 131 072 | 16 字节（还要梯度、正本、$m$、$v$） |
+
+图中省略了 bias；实际训练时挑哪些线性层挂 LoRA 是可配的，不是每层都挂。
 
 **这样写，代价是什么。** 全参微调时 $\Delta W$ 的每个元素都能独立取值，训练结束它可以是任意一个 $4096\times4096$ 的矩阵。LoRA 只更新 $A$ 和 $B$，所以不管这两个小矩阵学成什么样，乘出来的 $\Delta W$ 的秩永远不超过 $r$（$B$ 只有 $r$ 列，见[附录 A.8](../../appendix/linear-algebra.md#a.8-矩阵乘积与列空间的包含)）；反过来，秩 $\le r$ 的矩阵也都能写成 $BA$（[附录 A.12](../../appendix/linear-algebra.md#a.12-秩分解定理与-svd)有证明）。
 
@@ -111,20 +121,39 @@ $$
 
 $m$ 是梯度的平均（方向），$v$ 是梯度平方的平均（尺度）。它们是**逐参数**的：每个参数都有自己的 $m$ 和 $v$，训练全程保留，所以模型有多少可训练参数，就要多存两倍这么多的数。
 
-**混合精度还要一份 fp32 主副本。** 前向反向用 bf16 算得快，但 bf16 只有 7 位尾数、两三位有效数字（fp32/fp16/bf16 各是什么见[附录 C](../../appendix/numeric-formats.md)），一次更新 $\eta\,m/\sqrt v$ 常常小到加到 bf16 权重上直接被舍入成零。标准做法（ZeRO 论文[^zero] §3）是另存一份 fp32 的“master weights”，更新在 fp32 上做，再转成 bf16 用于下一轮前向。
+**混合精度还要一份 fp32 正本。** 前向反向用 bf16 算得快，但 bf16 只有 7 位尾数、两三位有效数字（fp32/fp16/bf16 各是什么见[附录 C](../../appendix/numeric-formats.md)），一次更新 $\eta\,m/\sqrt v$ 常常小到加到 bf16 权重上直接被舍入成零。
 
-把这些加起来，**每个可训练参数**要占：
+所以标准做法（ZeRO 论文[^zero] §3）是**同一个参数存两份**：
 
-| 存什么 | 精度 | 字节 |
-|---|---|---|
-| 权重（前向用） | bf16 | 2 |
-| 梯度 | bf16 | 2 |
-| fp32 主副本 | fp32 | 4 |
-| Adam $m$ | fp32 | 4 |
-| Adam $v$ | fp32 | 4 |
-| **合计** | | **16** |
+- **fp32 正本**（论文里叫 master weights）——训练期间它才是这个参数的权威值，所有更新都累加在它身上，全程不降精度；
+- **bf16 工作副本**——从正本复制出来的低精度版本，只用来算前向和反向，因为 bf16 矩阵乘快。每更新完一步，就从正本重新复制一份覆盖它。
 
-而**冻结的参数**只需要第一行：2 字节。梯度不算、动量不存、主副本不要。
+换句话说，bf16 那份是「用完就可以扔、随时能从正本再生成」的，fp32 正本才是真正被训练的东西。
+
+![](../../site_src/assets/fig-train-step-light.svg){.fig .light-content fig-alt="一步训练里 bf16 工作副本与 fp32 正本各自何时被用到"}
+![](../../site_src/assets/fig-train-step-dark.svg){.fig .dark-content fig-alt="一步训练里 bf16 工作副本与 fp32 正本各自何时被用到"}
+
+先看一步训练里这些东西各自什么时候用到。设某个可训练参数是 $\theta$：
+
+1. **前向**：用 $\theta$ 的 bf16 副本参与矩阵乘，算出 loss。bf16 走 Tensor Core，比 fp32 快得多。
+2. **反向**：算出梯度 $g$，也是 bf16。
+3. **更新**：把 $g$ 转成 fp32，更新 $m$ 和 $v$，算出更新量 $\eta\,\hat m/\sqrt{\hat v}$，**加到 $\theta$ 的 fp32 正本上**。
+4. **同步**：把更新后的 fp32 正本转成 bf16，覆盖第 1 步用的那份工作副本，供下一轮前向。
+
+第 3 步之所以必须在 fp32 正本上做，是因为更新量常常只有 $10^{-4}$ 量级，直接加到 bf16 上会被舍入成零（[附录 C](../../appendix/numeric-formats.md)）。
+
+精度换算：bf16 是 16 位 = **2 字节**，fp32 是 32 位 = **4 字节**。逐项加起来：
+
+| 存什么 | 什么时候用 | 精度 | 每个参数占 |
+|---|---|---|---|
+| $\theta$ 的 bf16 工作副本 | 步骤 1、2 算前向反向 | bf16 | 2 |
+| 梯度 $g$ | 步骤 2 产出，步骤 3 消费 | bf16 | 2 |
+| $\theta$ 的 fp32 正本 | 步骤 3 累加更新 | fp32 | 4 |
+| Adam $m$ | 步骤 3，全程保留 | fp32 | 4 |
+| Adam $v$ | 步骤 3，全程保留 | fp32 | 4 |
+| **合计** | | | **16 字节** |
+
+**冻结的参数只需要第一行的 2 字节。** 它不参与步骤 2–4：没有梯度、没有动量、不需要 fp32 正本——因为它根本不更新，bf16 那一份就是全部。
 
 对 9B 模型，可训练参数 $N$：
 
@@ -134,7 +163,7 @@ $m$ 是梯度的平均（方向），$v$ 是梯度平方的平均（尺度）。
 | 可训练参数 × 16 B | $9\times10^9\times16$ = **144 GB** | $2\times10^7\times16$ = 0.3 GB |
 | **合计（不含激活值）** | **~144 GB** | **~18.3 GB** |
 
-一块 128 GB 统一内存的 Jetson AGX Thor 可用约 115 GB——**全参微调 9B 放不下，LoRA 剩一大半空间给激活值。** 24 GB 独显更是只有 LoRA/QLoRA 一条路。这才是 LoRA 的真正意义：$W_0$ 冻结 $\Rightarrow$ 它不需要梯度、动量、主副本。
+一块 128 GB 统一内存的 Jetson AGX Thor 可用约 115 GB——**全参微调 9B 放不下，LoRA 剩一大半空间给激活值。** 24 GB 独显更是只有 LoRA/QLoRA 一条路。LoRA 省的就是这一块。90 亿个参数全部冻结，每个只占权重那 2 字节；额外那 14 字节只落在 4300 万个可训练参数头上。
 
 > [!CAUTION]
 > **一个常见误解**
@@ -155,13 +184,13 @@ $m$ 是梯度的平均（方向），$v$ 是梯度平方的平均（尺度）。
 
     两者会同时为零，**永远学不动**。取 $B=0$、$A$ 随机时，第一步 $\partial\mathcal{L}/\partial B \neq 0$，$B$ 先动；$B$ 一旦非零，$A$ 也开始收到梯度。
 
-**`alpha` 是什么。** 实际用的是缩放版本：
+**`alpha` 是干什么的。** §2.2 写的 $\Delta W = BA$ 是简化版。实际实现里还会乘一个系数：
 
 $$
 \Delta W = \frac{\alpha}{r}\,BA
 $$
 
-$r$ 变大时 $BA$ 的数值幅度大致随之变大，除以 $r$ 把尺度稳住，**这样调 $r$ 时不必重调学习率**。$\alpha$ 才是真正的强度旋钮，习惯取 $\alpha = 2r$（我们用 $r=16,\ \alpha=32$）。
+$r$ 变大时 $BA$ 的数值幅度大致随之变大，除以 $r$ 把尺度稳住，**这样改 $r$ 之后不必把学习率整个重调一遍**（LoRA 论文的原话是 reduces the need to retune，不是完全免除）。$\alpha$ 才是真正的强度旋钮，习惯取 $\alpha = 2r$（我们用 $r=16,\ \alpha=32$）。
 
 ### 2.6 推理时零开销
 
@@ -199,7 +228,7 @@ $$
 仓库自带一份**演示数据集**，任何人 clone 下来都能直接用，不需要交出自己的任何数据：
 
 ```bash
-python code/make_demo_dataset.py     # -> data/persona_demo.jsonl，137 条
+sudo docker exec -it t2t-day00 python code/make_demo_dataset.py   # -> data/persona_demo.jsonl，137 条
 ```
 
 它由两部分拼成，都在仓库里、都可复现：
@@ -214,14 +243,21 @@ python code/make_demo_dataset.py     # -> data/persona_demo.jsonl，137 条
 ### 3.2 看一眼数据（5 min）
 
 ```bash
-head -3 data/persona_demo.jsonl | python -m json.tool
+sudo docker exec -it t2t-day00 python code/peek.py data/persona_demo.jsonl -n 3
 ```
+
+（`data/persona_demo.jsonl` 是 JSONL——一行一个 JSON 对象。`python -m json.tool` 只能解析单个对象，喂多行会报 `Extra data`，所以用 `peek.py`。）
 
 **这一步别跳过。** 数据里有什么，模型就学什么；数据里没有的，训一万步也不会有。
 
 ### 3.3 微调（40–60 min）
 
-在 Jetson 上用 NGC 的 PyTorch 容器（独显机器可以直接在 conda 环境里跑 `setup_env.sh`）：
+> [!IMPORTANT]
+> **下面所有 `python code/…` 都在容器里跑，不是在你的 Mac 或宿主机上。** 宿主机上没装 torch/peft/trl，直接跑会 `ModuleNotFoundError`。
+>
+> 起一个常驻容器，之后每条命令前面加 `sudo docker exec -it t2t-day00`；或者 `sudo docker exec -it t2t-day00 bash` 进去一次，后面照抄命令即可。用独显的机器可以跳过容器，直接在自己的 conda 环境里跑 `bash code/setup_env.sh`。
+
+在 Jetson 上用 NGC 的 PyTorch 容器：
 
 ```bash
 source ../../common/env.sh                    # HF_HUB_DISABLE_XET=1 等
@@ -244,9 +280,9 @@ nohup bash ../../common/jetson_watchdog.sh 'train_lora' 85 &
 然后训：
 
 ```bash
-python code/train_lora.py \
+sudo docker exec -it t2t-day00 python code/train_lora.py \
     --model Qwen/Qwen3.5-9B \
-    --data private/sft.jsonl \
+    --data data/persona_demo.jsonl \
     --out private/adapter \
     --epochs 3 --rank 16 --batch 4 --lr 1e-4
 ```
@@ -258,7 +294,7 @@ python code/train_lora.py \
 ### 3.4 对比（20 min）
 
 ```bash
-python code/compare.py \
+sudo docker exec -it t2t-day00 python code/compare.py \
     --model Qwen/Qwen3.5-9B --adapter private/adapter \
     --prompts code/prompts.txt \
     --out results/before_after.md
@@ -267,17 +303,17 @@ python code/compare.py \
 ### 3.4b 量一下到底学到没有
 
 ```bash
-python code/measure_style.py --model Qwen/Qwen3.5-9B --adapter private/adapter --prompts code/prompts.txt
+sudo docker exec -it t2t-day00 python code/measure_style.py --model Qwen/Qwen3.5-9B --adapter private/adapter --prompts code/prompts.txt
 ```
 
 同一批问题分别用 base 和 adapter 生成，统计风格标记的命中率。**这就是这天要留下的数字。**
 
-> 以上串起来就是 `bash code/run_all.sh`，跑完直接进 3.5。
+> 以上串起来就是 `sudo docker exec -it t2t-day00 bash code/run_all.sh`，跑完直接进 3.5。
 
 ### 3.5 和它聊天
 
 ```bash
-python code/chat.py --model Qwen/Qwen3.5-9B --adapter private/adapter
+sudo docker exec -it t2t-day00 python code/chat.py --model Qwen/Qwen3.5-9B --adapter private/adapter
 ```
 
 流式输出、多轮记忆、已关 thinking。`/base` 切到原模型、`/lora` 切回 adapter，同一个问题两边各问一遍最能看出差别；`/reset` 清空对话，`/quit` 退出。
@@ -346,10 +382,11 @@ Jetson AGX Thor（120 W），Qwen3.5-9B bf16，LoRA r=16、α=32、`all-linear`�
 跑通之后，把演示数据集换成**你自己的语料**，这条支线会一直走到 day 72：
 
 ```bash
-python code/collect_corpus.py --git ~/Code/your-repo --author-email "$(git config user.email)" \
+# 同样在容器里跑
+sudo docker exec -it t2t-day00 python code/collect_corpus.py --git ~/Code/your-repo --author-email "$(git config user.email)" \
     --markdown ~/notes --out private/corpus.jsonl
-python code/build_sft.py --in private/corpus.jsonl --out private/sft.jsonl --min-chars 40
-python code/add_batch.py private/paste_*.txt      # 手动粘贴的聊天记录，自动合并连续消息
+sudo docker exec -it t2t-day00 python code/build_sft.py --in private/corpus.jsonl --out private/sft.jsonl --min-chars 40
+sudo docker exec -it t2t-day00 python code/add_batch.py private/paste_*.txt      # 手动粘贴的聊天记录，自动合并连续消息
 ```
 
 个人语料一律放 `private/`（已 gitignore），**不要进仓库**。

@@ -4,6 +4,11 @@ $font-family-sans-serif: -apple-system, BlinkMacSystemFont, "Segoe UI",
 $font-family-monospace: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace !default;
 
 /*-- scss:rules --*/
+/* 正文插图：满宽、居中、去掉 figure 默认边距和空 caption */
+.fig { display: block; width: 100%; max-width: 900px; height: auto; margin: 1.1rem auto; }
+figure:has(.fig) { margin: 0; }
+figure:has(.fig) figcaption { display: none; }
+
 /* <img> 里的 SVG 不继承页面颜色，深色主题直接换一张图 */
 .quarto-dark .navbar-logo, body.quarto-dark .navbar-logo { content: url("assets/logo-dark.svg"); }
 
@@ -29,7 +34,9 @@ figure:has(.hero) figcaption { display: none; }
 .navbar .nav-link.active { color: #9BD62F; font-weight: 600; }
 
 body { line-height: 1.75; letter-spacing: 0.01em; }
-.katex-display { overflow-x: auto; overflow-y: hidden; padding: 0.3rem 0; }
+/* 行间公式：横向可滚动；上下留足内边距，否则 overflow 会切掉分式的上下沿 */
+.katex-display { overflow-x: auto; overflow-y: hidden; padding: .9rem .2rem; margin: .4rem 0; }
+.katex-display > .katex { white-space: nowrap; }
 .table-responsive, table { display: block; overflow-x: auto; max-width: 100%; }
 code:not(.sourceCode) {
   background: rgba(110, 118, 129, 0.4);

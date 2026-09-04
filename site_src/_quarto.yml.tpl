@@ -54,6 +54,7 @@ __APPENDIX__
 
 format:
   html:
+    lightbox: auto
     from: markdown+autolink_bare_uris+emoji
     theme:
       light: [cosmo, assets/custom.scss]

@@ -63,7 +63,10 @@ def rewrite_links(text: str, in_day: bool, in_sub: bool = None) -> str:
     text = re.sub(r"\]\((?:\.\./)*(common/[^)]*|templates/[^)]*|scripts/[^)]*|LICENSE)\)",
                   lambda m: f"]({GH}/{m.group(1)})", text)
     # results/ 下的图片复制进站点本地引用；其余 code/ results/ 文件链到 GitHub
-    text = re.sub(r"\]\(site_src/(assets/[^)]*)\)", lambda m: f"]({m.group(1)})", text)
+    # 图片资源在 site_src/assets/：源码里可能写成 site_src/… 或 ../site_src/…，
+    # 统一改成相对站点的 assets/…（子目录页面要加 ../）
+    text = re.sub(r"\]\((?:\.\./)*site_src/(assets/[^)]*)\)",
+                  lambda m: f"]({up}{m.group(1)})", text)
     text = re.sub(r"\]\((results/[^)]*\.(?:png|jpg|jpeg|svg|gif))\)",
                   lambda m: f"](assets/DAYDIR/{m.group(1)})", text)
     text = re.sub(r"\]\((code/[^)]*|results/[^)]*)\)",
