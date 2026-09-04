@@ -8,7 +8,7 @@
 import pathlib, re, sys
 
 CJK = re.compile(r'[　-鿿＀-￯]')
-BLOCK_START = re.compile(r'^\s*(#{1,6}\s|\||>|<|---|\*\*\*|===|```|:::|!!!|\?\?\?)')
+BLOCK_START = re.compile(r'^\s*(#{1,6}\s|\||>|<|---|\*\*\*|===|```|:::|!!!|\?\?\?|\[\^[^\]]+\]:)')
 LIST_ITEM = re.compile(r'^(\s*)([-*+]\s|\d+[.)]\s)')
 
 

@@ -4,6 +4,7 @@ project:
   render:
     - "*.md"
     - "days/*.md"
+    - "appendix/*.md"
 
 website:
   title: "tokens → torque"
@@ -37,6 +38,9 @@ website:
       - section: Days
         contents:
 __DAYS__
+      - section: 附录
+        contents:
+__APPENDIX__
   page-footer:
     left: "MIT · wheatfox"
     right: "用 [Quarto](https://quarto.org) 构建"

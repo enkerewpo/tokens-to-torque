@@ -48,14 +48,18 @@ def alerts_to_callouts(text: str) -> str:
     return "\n".join(out)
 
 
-def rewrite_links(text: str, in_day: bool) -> str:
-    text = re.sub(r"\]\((?:\.\./)*days/day(\d\d)_[a-z0-9-]+/\)",
-                  lambda m: f"](days/day{m.group(1)}.md)" if not in_day
-                            else f"](day{m.group(1)}.md)", text)
+def rewrite_links(text: str, in_day: bool, in_sub: bool = None) -> str:
+    """in_day：文件在 days/ 下；in_sub：文件在任意一级子目录下（days/ 或 appendix/）。"""
+    if in_sub is None:
+        in_sub = in_day
+    up = "../" if in_sub else ""
+    text = re.sub(r"\]\((?:\.\./)*days/day(\d\d)_[a-z0-9-]+/(#[^)]*)?\)",
+                  lambda m: f"]({'' if in_day else up + 'days/'}day{m.group(1)}.md{m.group(2) or ''})", text)
+    text = re.sub(r"\]\((?:\.\./)*appendix/([a-z0-9-]+)\.md(#[^)]*)?\)",
+                  lambda m: f"]({up}appendix/{m.group(1)}.md{m.group(2) or ''})", text)
     for src, dst in TOP.items():
-        prefix = "../" if in_day else ""
         text = re.sub(re.escape(f"]({src}") + r"(#[^)]*)?\)",
-                      lambda m, d=dst, p=prefix: f"]({p}{d}{m.group(1) or ''})", text)
+                      lambda m, d=dst: f"]({up}{d}{m.group(1) or ''})", text)
     text = re.sub(r"\]\((?:\.\./)*(common/[^)]*|templates/[^)]*|scripts/[^)]*|LICENSE)\)",
                   lambda m: f"]({GH}/{m.group(1)})", text)
     text = re.sub(r"\]\((code/[^)]*|results/[^)]*)\)",
@@ -75,8 +79,8 @@ def strip_h1(text: str):
     return m.group(1).strip(), text[:m.start()] + text[m.end():].lstrip("\n")
 
 
-def process(path: pathlib.Path, in_day: bool, daydir: str = "") -> tuple[str, str]:
-    body = alerts_to_callouts(rewrite_links(path.read_text(), in_day))
+def process(path: pathlib.Path, in_day: bool, daydir: str = "", in_sub: bool = None) -> tuple[str, str]:
+    body = alerts_to_callouts(rewrite_links(path.read_text(), in_day, in_sub))
     if daydir:
         body = body.replace("DAYDIR", daydir)
     title, body = strip_h1(body)
@@ -84,9 +88,10 @@ def process(path: pathlib.Path, in_day: bool, daydir: str = "") -> tuple[str, st
 
 
 def main():
-    for p in list(SRC.glob("*.md")) + list((SRC / "days").glob("*.md")):
+    for p in list(SRC.glob("*.md")) + list((SRC / "days").glob("*.md")) + list((SRC / "appendix").glob("*.md")):
         p.unlink()
     (SRC / "days").mkdir(parents=True, exist_ok=True)
+    (SRC / "appendix").mkdir(parents=True, exist_ok=True)
 
     for src, dst in TOP.items():
         f = ROOT / src
@@ -109,12 +114,19 @@ def main():
         (SRC / "days" / f"day{num}.md").write_text(frontmatter(title) + body)
         days.append((num, title))
 
+    apps = []
+    for f in sorted((ROOT / "appendix").glob("*.md")):
+        title, body = process(f, in_day=False, in_sub=True)
+        (SRC / "appendix" / f.name).write_text(frontmatter(title) + body)
+        apps.append((f.stem, title))
+
     tpl = (SRC / "_quarto.yml.tpl").read_text()
     entries = "\n".join(f"          - text: \"{t}\"\n            href: days/day{n}.md"
                         for n, t in days) or "          - text: (还没开始)\n            href: index.md"
-    (SRC / "_quarto.yml").write_text(tpl.replace("__DAYS__", entries))
+    app_entries = "\n".join(f"          - text: \"{t}\"\n            href: appendix/{n}.md" for n, t in apps)
+    (SRC / "_quarto.yml").write_text(tpl.replace("__DAYS__", entries).replace("__APPENDIX__", app_entries))
 
-    print(f"site_src/ 生成完毕：{len(TOP)} 个顶层页 + {len(days)} 天")
+    print(f"site_src/ 生成完毕：{len(TOP)} 个顶层页 + {len(days)} 天 + {len(apps)} 个附录")
     for n, t in days:
         print(f"  day{n}  {t}")
 
