@@ -1,0 +1,59 @@
+# ============================================================
+#  个人数据：永远不进仓库。仓库里只放验证过的 tutorial。
+# ============================================================
+LOCAL.md
+private/
+**/private/
+*.personal.*
+chatlog*
+chat_log*
+conversations*
+corpus*.jsonl
+sft*.jsonl
+
+# 任何 jsonl 默认不进（训练数据几乎都是这个格式）；
+# 确实要公开的示例数据用 git add -f，并且先自己看一遍。
+*.jsonl
+
+# 模型与权重
+*.safetensors
+*.bin
+*.gguf
+*.engine
+*.onnx
+checkpoints/
+adapters/
+outputs/
+runs/
+
+# 数据集
+data/raw/
+data/personal/
+*.parquet
+*.pkl
+*.pkl.gz
+
+# 文档站（Quarto）：site_src/ 下的 markdown 和 _quarto.yml 是生成物，
+# site/ 是渲染产物。源头是仓库根目录的 md 和 days/*/README.md。
+site_src/*.md
+site_src/days/
+site_src/_quarto.yml
+site_src/_site/
+site_src/.quarto/
+.quarto/
+
+# 运行产物（结果表和图手动 add，原始日志不要）
+*.log
+*.nsys-rep
+*.ncu-rep
+telemetry/
+__pycache__/
+.ipynb_checkpoints/
+.venv/
+venv/
+
+.DS_Store
+
+# agent 的本地状态不进仓库，但 .claude/skills/ 要进（那是给学习者的）
+.claude/settings.local.json
+.claude/memory/

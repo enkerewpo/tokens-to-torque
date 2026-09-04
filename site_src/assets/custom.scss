@@ -1,0 +1,26 @@
+/*-- scss:defaults --*/
+$font-family-sans-serif: -apple-system, BlinkMacSystemFont, "Segoe UI",
+  "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif !default;
+$font-family-monospace: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace !default;
+$body-color: #24292f !default;
+$link-color: #0b7285 !default;
+
+/*-- scss:rules --*/
+/* 中文正文行距要比英文松，否则很挤 */
+body { line-height: 1.75; letter-spacing: 0.01em; }
+h1, h2, h3 { letter-spacing: 0; }
+
+/* 公式在窄屏可横向滚动，不撑破版面 */
+.katex-display { overflow-x: auto; overflow-y: hidden; padding: 0.3rem 0; }
+
+/* 宽表格自己滚 */
+.table-responsive, table { display: block; overflow-x: auto; max-width: 100%; }
+table th, table td { white-space: normal; }
+
+/* 行内代码在中文里更好认 */
+code:not(.sourceCode) {
+  background: rgba(175, 184, 193, 0.2);
+  padding: 0.15em 0.35em;
+  border-radius: 4px;
+  font-size: 0.88em;
+}

@@ -1,0 +1,15 @@
+/*-- scss:defaults --*/
+$font-family-sans-serif: -apple-system, BlinkMacSystemFont, "Segoe UI",
+  "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif !default;
+$font-family-monospace: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace !default;
+
+/*-- scss:rules --*/
+body { line-height: 1.75; letter-spacing: 0.01em; }
+.katex-display { overflow-x: auto; overflow-y: hidden; padding: 0.3rem 0; }
+.table-responsive, table { display: block; overflow-x: auto; max-width: 100%; }
+code:not(.sourceCode) {
+  background: rgba(110, 118, 129, 0.4);
+  padding: 0.15em 0.35em;
+  border-radius: 4px;
+  font-size: 0.88em;
+}
