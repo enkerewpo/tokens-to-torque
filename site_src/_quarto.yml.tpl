@@ -1,6 +1,9 @@
 project:
   type: website
   output-dir: _site
+  # 只在 SCSS 的 url() 里出现的资源，Quarto 不会自动收集，要显式声明
+  resources:
+    - assets/*.svg
   render:
     - "*.md"
     - "days/*.md"
@@ -12,6 +15,7 @@ website:
   site-url: https://enkerewpo.github.io/tokens-to-torque/
   repo-url: https://github.com/enkerewpo/tokens-to-torque
   repo-actions: [source]
+  favicon: assets/favicon.svg
   search:
     location: navbar
     type: overlay
