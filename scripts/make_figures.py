@@ -70,35 +70,82 @@ def fig_lora_arch(p):
 
 # ------------------------------------------------------------- 训练一步四阶段
 CYCLE = 8.0
+LAYERS = [3, 4, 3]
+
+
+def _net(p, x0, y0, dx, dy):
+    """算出每层节点坐标。"""
+    cols = []
+    for li, n in enumerate(LAYERS):
+        h = (n - 1) * dy
+        cols.append([(x0 + li * dx, y0 + i * dy - h / 2) for i in range(n)])
+    return cols
 
 
 def fig_train_step(p):
-    W, H, CY = 720, 290, 190
-    b, css = [], ("@keyframes hot{0%,1%{opacity:.2}3%,23%{opacity:1}25%,100%{opacity:.2}}"
-                  f".hot{{animation:hot {CYCLE}s linear infinite}}" + NOMOTION)
-    for label, use, color, x in (("bf16 工作副本", "用来算", BLUE, 56),
-                                 ("fp32 正本", "用来存", GREEN, 424)):
-        b.append(box(x, 36, 240, 66, p["box"], color))
-        b.append(text(x + 120, 66, label, 17, p["fg"], anchor="middle", weight="700", cls="m"))
-        b.append(text(x + 120, 88, use, 13.5, p["sub"], anchor="middle"))
+    """一步训练：前向、反向、更新、同步。静止时也能读——方向由网络上下两条箭头给出。"""
+    W, H, CY = 820, 296, 150
+    CYC = CYCLE
+    cols = _net(p, 110, CY, 140, 42)
+    OUTX = cols[-1][0][0]
+    LX = OUTX + 62
+    b = [f'<defs>'
+         f'<marker id="fw" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">'
+         f'<path d="M0 .5 7 4 0 7.5z" fill="{BLUE}"/></marker>'
+         f'<marker id="bw" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">'
+         f'<path d="M0 .5 7 4 0 7.5z" fill="{AMBER}"/></marker>'
+         f'<marker id="gw" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">'
+         f'<path d="M0 .5 7 4 0 7.5z" fill="{GREEN}"/></marker></defs>']
+    css = ("@keyframes lit{0%,1%{opacity:.25}3%,23%{opacity:1}25%,100%{opacity:.25}}"
+           f".li{{animation:lit {CYC}s linear infinite}}"
+           "@media(prefers-reduced-motion:reduce){.li{animation:none;opacity:1}}")
+    d = lambda k: f"animation-delay:{-CYC / 4 * k:g}s"
 
-    xs = [130, 290, 450, 610]
-    for k, name in enumerate(["前向", "反向", "更新", "同步"]):
-        x = xs[k]
-        b.append(f'<circle cx="{x}" cy="{CY}" r="32" fill="{p["dim"]}" stroke="{p["line"]}" stroke-width="1.4"/>')
-        b.append(f'<circle class="hot" cx="{x}" cy="{CY}" r="32" fill="none" stroke="{GREEN}" '
-                 f'stroke-width="3.2" style="animation-delay:{-CYCLE / 4 * k:g}s"/>')
-        b.append(text(x, CY - 2, str(k + 1), 15, GREEN, anchor="middle", weight="700", cls="m"))
-        b.append(text(x, CY + 18, name, 14.5, p["fg"], anchor="middle", weight="600"))
-        if k < 3:
-            b.append(f'<path d="M{x + 34} {CY}h{xs[k + 1] - x - 68}" stroke="{p["line"]}" '
-                     f'stroke-width="2" stroke-linecap="round"/>')
-    b.append(f'<path d="M642 {CY}q46 52 -156 52H234q-150 0 -104 -52" fill="none" '
-             f'stroke="{p["line"]}" stroke-width="1.8" stroke-dasharray="5 5"/>')
-    b.append(f'<path d="M160 102v52" stroke="{BLUE}" stroke-width="2" opacity=".5"/>')
-    b.append(f'<path d="M520 102v52" stroke="{GREEN}" stroke-width="2" opacity=".5"/>')
-    b.append(f'<path d="M610 158V118h-66" fill="none" stroke="{GREEN}" stroke-width="2" opacity=".5"/>')
-    return svg(W, H, "".join(b), css, "一步训练的四个阶段：前向、反向、更新、同步")
+    for li in range(len(cols) - 1):
+        for (x1, y1) in cols[li]:
+            for (x2, y2) in cols[li + 1]:
+                b.append(f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" '
+                         f'stroke="{p["line"]}" stroke-width="1" opacity=".6"/>')
+    for col in cols:
+        for (x, y) in col:
+            b.append(f'<circle cx="{x}" cy="{y}" r="10" fill="{p["box"]}" '
+                     f'stroke="{p["line"]}" stroke-width="1.4"/>')
+    # loss
+    b.append(f'<line x1="{OUTX + 12}" y1="{CY}" x2="{LX - 18}" y2="{CY}" stroke="{AMBER}" '
+             f'stroke-width="1.6" opacity=".7"/>')
+    b.append(f'<circle cx="{LX}" cy="{CY}" r="16" fill="{AMBER}" fill-opacity=".2" '
+             f'stroke="{AMBER}" stroke-width="2"/>')
+    b.append(text(LX, CY + 5, "L", 14, AMBER, anchor="middle", weight="700", cls="m"))
+
+    # 上下两条方向箭头，不与网络重叠
+    b.append(f'<path class="li" d="M96 72h{LX + 4 - 96}" stroke="{BLUE}" stroke-width="3.4" '
+             f'marker-end="url(#fw)" style="{d(0)}"/>')
+    b.append(text(96, 58, "① 前向：一路算到 loss", 14, BLUE, weight="700", cls="s li",
+                  extra=f'style="{d(0)}"'))
+    b.append(f'<path class="li" d="M{LX + 4} 228H96" stroke="{AMBER}" stroke-width="3.4" '
+             f'marker-end="url(#bw)" style="{d(1)}"/>')
+    b.append(text(96, 250, "② 反向：梯度传回每一层", 14, AMBER, weight="700", cls="s li",
+                  extra=f'style="{d(1)}"'))
+
+    # 右侧两份权重
+    bx, bw = 552, 250
+    b.append(box(bx, 60, bw, 60, p["box"], BLUE))
+    b.append(text(bx + bw / 2, 87, "bf16 工作副本", 15, p["fg"], anchor="middle", weight="700", cls="m"))
+    b.append(text(bx + bw / 2, 106, "①② 拿它算", 12.5, p["sub"], anchor="middle"))
+    b.append(f'<rect class="li" x="{bx}" y="60" width="{bw}" height="60" rx="9" fill="none" '
+             f'stroke="{BLUE}" stroke-width="3" style="{d(0)}"/>')
+    b.append(box(bx, 180, bw, 60, p["box"], GREEN))
+    b.append(text(bx + bw / 2, 207, "fp32 正本 + m, v", 15, p["fg"], anchor="middle", weight="700", cls="m"))
+    b.append(text(bx + bw / 2, 226, "③ 更新累加在这儿", 12.5, p["sub"], anchor="middle"))
+    b.append(f'<rect class="li" x="{bx}" y="180" width="{bw}" height="60" rx="9" fill="none" '
+             f'stroke="{GREEN}" stroke-width="3" style="{d(2)}"/>')
+    # ④ 同步：fp32 -> bf16
+    b.append(f'<path class="li" d="M{bx - 8} 210h-18V90h18" fill="none" stroke="{GREEN}" '
+             f'stroke-width="2.8" marker-end="url(#gw)" style="{d(3)}"/>')
+    b.append(text(bx - 34, 154, "④ 同步", 13, GREEN, anchor="end", weight="700", cls="s li",
+                  extra=f'style="{d(3)}"'))
+    b.append(text(bx + bw / 2, H - 12, "网络算的时候用的就是上面这份权重", 12, p["sub"], anchor="middle"))
+    return svg(W, H, "".join(b), css, "一步训练：前向、反向、权重更新、副本同步")
 
 
 # ---------------------------------------------------------------- 浮点位布局
@@ -124,28 +171,40 @@ def fig_float_bits(p):
 
 # ----------------------------------------------------------------------- SVD
 def fig_svd(p):
-    W, H, R = 760, 246, 54
-    css = ("@keyframes r1{0%,10%{transform:rotate(0)}26%,100%{transform:rotate(-34deg)}}"
-           "@keyframes st{0%,34%{transform:scale(1,1)}52%,100%{transform:scale(1.5,.55)}}"
-           "@keyframes r2{0%,60%{transform:rotate(0)}78%,100%{transform:rotate(26deg)}}"
-           ".r1{animation:r1 9s ease-in-out infinite;transform-origin:center}"
-           ".st{animation:st 9s ease-in-out infinite;transform-origin:center}"
-           ".r2{animation:r2 9s ease-in-out infinite;transform-origin:center}" + NOMOTION)
-    b = []
-    for i, (name, cls) in enumerate([("单位圆", ""), ("Vᵀ 旋转", "r1"),
-                                     ("Σ 拉伸", "r1 st"), ("U 旋转", "r1 st r2")]):
-        ox, oy = 104 + i * 184, 112
+    """四格各画各的终态——静止时也能看出变化；动画只是让过渡更直观。"""
+    import math
+    W, H, R = 780, 250 , 44
+    css = ("@keyframes pulse{0%,1%{opacity:.3}4%,22%{opacity:1}25%,100%{opacity:.3}}"
+           ".pu{animation:pulse 8s linear infinite}"
+           "@media(prefers-reduced-motion:reduce){.pu{animation:none;opacity:1}}")
+    b = [f'<defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">'
+         f'<path d="M0 .5 7 4 0 7.5z" fill="{p["sub"]}"/></marker></defs>']
+
+    # 每格：(名字, 旋转角, x 缩放, y 缩放)，逐格叠加
+    stages = [("单位圆", 0, 1.0, 1.0), ("Vᵀ 旋转", -34, 1.0, 1.0),
+              ("Σ 拉伸", -34, 1.55, 0.55), ("U 再旋转", -34 + 26, 1.55, 0.55)]
+    for i, (name, rot, sx, sy) in enumerate(stages):
+        ox, oy = 100 + i * 188, 112
         b.append(f'<g transform="translate({ox},{oy})">')
-        b.append(f'<path d="M-78 0h156M0 -78v156" stroke="{p["line"]}" stroke-width="1"/>')
-        shape = (f'<circle r="{R}" fill="{GREEN}" fill-opacity=".16" stroke="{GREEN}" stroke-width="2.6"/>'
-                 f'<path d="M0 0h{R}" stroke="{BLUE}" stroke-width="3" stroke-linecap="round"/>'
-                 f'<path d="M0 0v-{R}" stroke="{AMBER}" stroke-width="3" stroke-linecap="round"/>')
-        b.append(f'<g class="{cls}">{shape}</g>' if cls else f'<g>{shape}</g>')
-        b.append('</g>')
-        b.append(text(ox, oy + 102, name, 15, p["fg"], anchor="middle", weight="600", cls="m"))
+        b.append(f'<path d="M-76 0h152M0 -76v152" stroke="{p["line"]}" stroke-width="1"/>')
+        # 第 3、4 格的拉伸发生在旋转后的坐标系里：先转 rot_inner，再缩放，再转外层
+        inner = -34 if i >= 2 else 0
+        outer = rot - inner
+        g = f'<g transform="rotate({outer}) scale({sx},{sy}) rotate({inner})">' if i >= 2 \
+            else f'<g transform="rotate({rot})">'
+        b.append(g)
+        b.append(f'<circle r="{R}" fill="{GREEN}" fill-opacity=".16" stroke="{GREEN}" stroke-width="2.6"/>')
+        b.append(f'<path d="M0 0h{R}" stroke="{BLUE}" stroke-width="3" stroke-linecap="round"/>')
+        b.append(f'<path d="M0 0v-{R}" stroke="{AMBER}" stroke-width="3" stroke-linecap="round"/>')
+        b.append('</g></g>')
+        b.append(text(ox, oy + 96, name, 15, p["fg"], anchor="middle", weight="600",
+                      cls="s pu", extra=f'style="animation-delay:{-2 * i:g}s"'))
         if i < 3:
-            b.append(f'<path d="M{ox + 86} {oy}h22" stroke="{p["line"]}" stroke-width="2" stroke-linecap="round"/>')
-    return svg(W, H, "".join(b), css, "SVD 的几何：旋转、各方向拉伸、再旋转")
+            b.append(f'<path d="M{ox + 84} {oy}h26" stroke="{p["sub"]}" stroke-width="2" '
+                     f'stroke-linecap="round" marker-end="url(#ar)"/>')
+    b.append(text(W / 2, H - 14, "蓝、橙是一对正交方向；拉伸那步各自乘上一个奇异值。",
+                  13, p["sub"], anchor="middle"))
+    return svg(W, H, "".join(b), css, "SVD 的几何：单位圆经旋转、各方向拉伸、再旋转变成椭圆")
 
 
 def main():
