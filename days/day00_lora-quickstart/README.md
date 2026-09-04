@@ -191,10 +191,11 @@ $$
 cd days/day00_lora-quickstart
 
 # 从本地若干 git 仓库里抽自己的 commit message
+# 默认拿本仓库的 commit message 和附录 markdown 当语料，任何人 clone 下来都能直接跑通；
+# 要训“你自己”，把 --git / --markdown 换成你的仓库和笔记目录。
 python code/collect_corpus.py \
-    --git ~/path/to/repo-a ~/path/to/repo-b \
-    --author-email you@example.com \
-    --markdown ~/notes \
+    --git ../.. --author-email "$(git config user.email)" \
+    --markdown ../../appendix \
     --out private/corpus.jsonl
 ```
 
@@ -217,11 +218,18 @@ python code/build_sft.py --in private/corpus.jsonl --out private/sft.jsonl --min
 
 ### 3.3 微调（40–60 min）
 
+在 Jetson 上用 NGC 的 PyTorch 容器（独显机器可以直接在 conda 环境里跑 `setup_env.sh`）：
+
 ```bash
-source ../../common/env.sh                    # 含 HF_HUB_DISABLE_XET=1 等必要环境变量
+source ../../common/env.sh                    # HF_HUB_DISABLE_XET=1 等
 bash ../../common/jetson_preflight.sh        # 任何一项 FAIL 就别起跑
-bash code/setup_env.sh                       # 容器内装 pin 好的 trl/peft/transformers
+sudo docker run -d --name t2t-day00 --runtime nvidia --ipc=host --network host \
+  -v $HOME/.cache/huggingface:/root/.cache/huggingface -v $(pwd):/workspace -w /workspace \
+  nvcr.io/nvidia/pytorch:25.08-py3 sleep infinity
+sudo docker exec -it t2t-day00 bash code/setup_env.sh   # 装 pin 好的 trl/peft/transformers
 ```
+
+之后的 `python code/…` 都在容器里跑：`sudo docker exec -it t2t-day00 python code/…`。
 
 另开一个终端起遥测和看门狗：
 
@@ -234,7 +242,7 @@ nohup bash ../../common/jetson_watchdog.sh 'train_lora' 85 &
 
 ```bash
 python code/train_lora.py \
-    --model <4B 级 instruct 模型> \
+    --model Qwen/Qwen3.5-9B \
     --data private/sft.jsonl \
     --out private/adapter \
     --epochs 2 --rank 16 --batch 4
@@ -248,15 +256,17 @@ python code/train_lora.py \
 
 ```bash
 python code/compare.py \
-    --model <同一个模型> --adapter private/adapter \
+    --model Qwen/Qwen3.5-9B --adapter private/adapter \
     --prompts code/prompts.txt \
     --out results/before_after.md
 ```
 
+> 以上四步串起来就是 `bash code/run_all.sh`，跑完直接进 3.5。
+
 ### 3.5 和它聊天
 
 ```bash
-python code/chat.py --model <同一个模型> --adapter private/adapter
+python code/chat.py --model Qwen/Qwen3.5-9B --adapter private/adapter
 ```
 
 流式输出、多轮记忆、已关 thinking。`/base` 切到原模型、`/lora` 切回 adapter，同一个问题两边各问一遍最能看出差别；`/reset` 清空对话，`/quit` 退出。
