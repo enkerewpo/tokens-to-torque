@@ -183,38 +183,30 @@ $$
 
 ## 3. 动手
 
-### 3.1 攒语料（30 min）
+### 3.1 准备数据集（2 min）
 
-要“越像你越好”的文本：commit message、笔记、给同学解释技术问题的话、论文段落、issue 回复。**不要用你转发的、复制的、AI 生成的**——那些不是你的语气。
-
-```bash
-cd days/day00_lora-quickstart
-
-# 从本地若干 git 仓库里抽自己的 commit message
-# 默认拿本仓库的 commit message 和附录 markdown 当语料，任何人 clone 下来都能直接跑通；
-# 要训“你自己”，把 --git / --markdown 换成你的仓库和笔记目录。
-python code/collect_corpus.py \
-    --git ../.. --author-email "$(git config user.email)" \
-    --markdown ../../appendix \
-    --out private/corpus.jsonl
-```
-
-> `private/` 已经在 `.gitignore` 里——**个人语料绝不进公开仓库**。
-
-看一眼收了多少、长什么样：
+仓库自带一份**演示数据集**，任何人 clone 下来都能直接用，不需要交出自己的任何数据：
 
 ```bash
-wc -l private/corpus.jsonl
-shuf -n 5 private/corpus.jsonl | python -m json.tool
+python code/make_demo_dataset.py     # -> data/persona_demo.jsonl，137 条
 ```
 
-### 3.2 转成 SFT 格式（20 min）
+它由两部分拼成，都在仓库里、都可复现：
+
+- **本仓库文档里的中文段落**（附录 A/B/C、课表、SETUP 等）——真实技术散文；
+- **`code/seeds.py` 里的中性问答种子**——覆盖课表话题和日常闲聊，让模型在聊天时也带着这套语气。
+
+然后由 `code/stylize.py` 统一注入一组**明确且可统计**的风格标记：口癖开头（唔／诶／嗯…）、句尾 `～`、口癖结尾（……大概是这样吧～）。随机种子固定，所以**风格的真值已知**，训练效果可以直接量化。
+
+> 为什么先用注入的风格而不是真实语料：真实语料的风格很浅（用词习惯、句子长度），微调完肉眼很难判断学没学到，容易自我欺骗。注入一组能数出来的标记，"有没有效果"就变成一个数字。等这条链路跑通了，再换成自己的语料（见 §6）。
+
+### 3.2 看一眼数据（5 min）
 
 ```bash
-python code/build_sft.py --in private/corpus.jsonl --out private/sft.jsonl --min-chars 40
+head -3 data/persona_demo.jsonl | python -m json.tool
 ```
 
-**这一步要手动看。** 打开 `private/sft.jsonl` 翻二三十条，删掉：纯粹的 `fix typo`、机器生成的、包含密钥或私人信息的、和你风格无关的。**数据质量在这个规模上比数量重要得多。**
+**这一步别跳过。** 数据里有什么，模型就学什么；数据里没有的，训一万步也不会有。
 
 ### 3.3 微调（40–60 min）
 
@@ -245,7 +237,7 @@ python code/train_lora.py \
     --model Qwen/Qwen3.5-9B \
     --data private/sft.jsonl \
     --out private/adapter \
-    --epochs 2 --rank 16 --batch 4
+    --epochs 3 --rank 16 --batch 4 --lr 1e-4
 ```
 
 > **模型选型和 wheel 版本以 [Jetson AI Lab «Fine-tune LLMs on Jetson»](https://www.jetson-ai-lab.com/tutorials/finetune-on-jetson/)
@@ -261,7 +253,15 @@ python code/compare.py \
     --out results/before_after.md
 ```
 
-> 以上四步串起来就是 `bash code/run_all.sh`，跑完直接进 3.5。
+### 3.4b 量一下到底学到没有
+
+```bash
+python code/measure_style.py --model Qwen/Qwen3.5-9B --adapter private/adapter --prompts code/prompts.txt
+```
+
+同一批问题分别用 base 和 adapter 生成，统计风格标记的命中率。**这就是这天要留下的数字。**
+
+> 以上串起来就是 `bash code/run_all.sh`，跑完直接进 3.5。
 
 ### 3.5 和它聊天
 
@@ -273,23 +273,55 @@ python code/chat.py --model Qwen/Qwen3.5-9B --adapter private/adapter
 
 ## 4. 结果
 
-Jetson AGX Thor（120 W），Qwen3.5-9B bf16，LoRA r=16、α=32、`all-linear`，lr 2e-4 cosine、3 步 warmup，batch 4 × 累积 2，2 epoch，189 条样本。
+Jetson AGX Thor（120 W），Qwen3.5-9B bf16，LoRA r=16、α=32、`all-linear`，cosine + 3 步 warmup，batch 4 × 累积 2，2 epoch。
 
 | | 值 |
 |---|---|
 | 可训练参数 / 总参数 | 43.3 M / 8.997 B = **0.48%** |
-| 训练耗时 | **3.2 min**（48 步） |
+| 训练耗时 | **3.2–3.9 min** |
 | 峰值内存 | **23.7 GB** |
 | 峰值 tj 温度 | **56 °C** |
 | train loss | **4.42 → 2.82** |
-| mean token accuracy | 0.29 → 0.45 |
 | adapter 文件 | 166 MB |
 
 对照 §2.4：权重 18 GB + 43 M × 16 B ≈ 0.7 GB，其余约 5 GB 是激活值和 CUDA 工作区。数字和推算对得上。
 
 ![训练曲线](results/training_curves.png)
 
-**效果。** 同一问题，base 给五级标题的长篇教程，adapter 给一两句笔记体，闲聊题也换成了口语——风格确实学到了。代价同样明显：它会把语料里的内容塞进无关问题，事实性变差。几百条样本只能改风格，改不了知识（§2.8）；口语语料占比越高，语气越明显。
+### 效果：风格标记命中率
+
+用仓库自带的 `data/persona_demo.jsonl`（137 条）训练，同一批 8 个问题，base 与 adapter 各生成一次：
+
+| 标记 | base | + adapter |
+|---|---|---|
+| 句尾 `～` | 0 / 8 | **8 / 8** |
+| 口癖开头（唔／诶／嗯…） | 0 / 8 | **5 / 8** |
+| 口癖结尾（……大概是这样吧～） | 0 / 8 | **7 / 8** |
+
+**137 条样本、3 分钟、0.48% 的参数，足以让 9B 模型换一套说话方式。**
+
+> [!IMPORTANT]
+> **这不是 prompt 工程，风格完全来自微调后的权重**
+>
+> `measure_style.py` 会先把真正送进模型的完整提示打印出来。base 和 adapter 收到的是**逐字节相同**的输入：
+>
+> ```
+> '<|im_start|>user\n解释一下什么是 KV cache。<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n'
+> ```
+>
+> 没有 system prompt，没有"请用可爱语气回答"这类指令，没有 few-shot 示例。两次生成唯一的差别是 `model.disable_adapter()` 开还是关——也就是那 43 M 个 LoRA 参数加不加进去。`chat.py` 里的 `/base` 和 `/lora` 切换同理，你可以自己验。
+
+### 学习率决定"学到风格"还是"背下语料"
+
+同一份数据、同样轮数，只改学习率：
+
+| lr | 表现 |
+|---|---|
+| 2e-4 | **过拟合**：开始逐字背训练语料，问 A 答 B |
+| 1e-4 | 风格稳定命中，知识基本保留（上表就是这一档） |
+| 5e-5 | **欠拟合**：回答和 base 几乎没区别 |
+
+一百多条样本配 43 M 可训练参数，容量远大于数据量，学习率就是那个平衡钮。day 31 会正经扫这条曲线。
 
 ## 5. 踩坑
 
@@ -300,15 +332,20 @@ Jetson AGX Thor（120 W），Qwen3.5-9B bf16，LoRA r=16、α=32、`all-linear`�
 
 ## 6. 延伸
 
+跑通之后，把演示数据集换成**你自己的语料**，这条支线会一直走到 day 72：
+
+```bash
+python code/collect_corpus.py --git ~/Code/your-repo --author-email "$(git config user.email)" \
+    --markdown ~/notes --out private/corpus.jsonl
+python code/build_sft.py --in private/corpus.jsonl --out private/sft.jsonl --min-chars 40
+python code/add_batch.py private/paste_*.txt      # 手动粘贴的聊天记录，自动合并连续消息
+```
+
+个人语料一律放 `private/`（已 gitignore），**不要进仓库**。
+
+两个链接：
+
+- [LoRA 论文](https://arxiv.org/abs/2106.09685) §4.1 的参数化，§7 的低秩证据
 - [Jetson AI Lab — Fine-tune LLMs on Jetson](https://www.jetson-ai-lab.com/tutorials/finetune-on-jetson/)
-- LoRA 论文（day 31 会正经读）
 
 **明天要回答的问题**：这个 adapter 到底改了模型的什么？`r=16` 是多少个参数，凭什么够？→ day 31。
-
-<!-- 参考文献用脚注 [^key] 写在这里，站点会自动汇总到文末的「参考文献」区 -->
-
-[^adam]: Loshchilov, I. & Hutter, F. "Decoupled Weight Decay Regularization." [*ICLR* 2019](https://openreview.net/forum?id=Bkg6RiCqY7). [arXiv:1711.05101](https://arxiv.org/abs/1711.05101)（AdamW；Adam 本身见 Kingma & Ba, *ICLR* 2015, [arXiv:1412.6980](https://arxiv.org/abs/1412.6980)）。
-[^zero]: Rajbhandari, S. et al. "ZeRO: Memory Optimizations Toward Training Trillion Parameter Models." [*SC* 2020](https://doi.org/10.1109/SC41405.2020.00024). [arXiv:1910.02054](https://arxiv.org/abs/1910.02054). §3 的混合精度 Adam 内存账：每参数 16 字节。
-[^strang]: Strang, G. [*Introduction to Linear Algebra*](https://math.mit.edu/~gs/linearalgebra/), 5th ed. Wellesley-Cambridge Press, 2016. 行秩等于列秩：§3.5；秩–零化度定理：§3.6；SVD 与秩：§7.1。
-[^aghajanyan]: Aghajanyan, A., Zettlemoyer, L. & Gupta, S. "Intrinsic Dimensionality Explains the Effectiveness of Language Model Fine-Tuning." [*ACL* 2021](https://aclanthology.org/2021.acl-long.568/). [arXiv:2012.13255](https://arxiv.org/abs/2012.13255).
-[^lora]: Hu, E. J. et al. "LoRA: Low-Rank Adaptation of Large Language Models." [*ICLR* 2022](https://openreview.net/forum?id=nZeVKeeFYf9). [arXiv:2106.09685](https://arxiv.org/abs/2106.09685). 低秩假设的实验证据在 §7。

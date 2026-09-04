@@ -13,6 +13,8 @@ bad=0
 # 1. 路径级：个人数据不该出现在索引里
 while IFS= read -r f; do
   case "$f" in
+    # 例外：days/*/data/ 是随仓库发布的演示数据集，由脚本从仓库文档生成，无个人数据
+    days/*/data/*.jsonl) continue ;;
     */private/*|private/*|LOCAL.md|*.jsonl|*chatlog*|*conversations*)
       echo "BLOCK  个人数据路径: $f"; bad=1 ;;
   esac

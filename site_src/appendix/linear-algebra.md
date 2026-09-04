@@ -238,7 +238,7 @@ $$
 
 （$\Leftarrow$）若 $M=BA$，则对任意 $\mathbf{x}$，$M\mathbf{x}=B(A\mathbf{x})\in\operatorname{col}(B)$，所以 $\operatorname{col}(M)\subseteq\operatorname{col}(B)$，于是 $\operatorname{rank}(M)\le\dim\operatorname{col}(B)\le r$（$B$ 只有 $r$ 列，列空间维数不可能超过 $r$）。$\blacksquare$
 
-所以 Day 00 §2.2 那句“任何秩 $\le r$ 的矩阵都能写成 $BA$”就是这个定理。分解不唯一（对任意可逆 $G\in\mathbb{R}^{r\times r}$，$(BG)(G^{-1}A)$ 也是一组），但训练只需要存在性。
+所以 Day 00 §2.2 那句“任何秩 $\le r$ 的矩阵都能写成 $BA$”就是这个定理，也是 LoRA[^lora] 参数化的依据。分解不唯一（对任意可逆 $G\in\mathbb{R}^{r\times r}$，$(BG)(G^{-1}A)$ 也是一组），但训练只需要存在性。
 
 ### A.12.2 SVD 给出显式分解；「近似低秩」怎么量化
 

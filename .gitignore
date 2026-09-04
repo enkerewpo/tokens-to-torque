@@ -62,3 +62,7 @@ venv/
 # results/ 只放图；模型输出文本含个人内容，不进仓库
 days/*/results/*.md
 days/*/results/*.json
+
+# 例外放最后才生效：随仓库发布的演示数据集（由 make_demo_dataset.py 从仓库文档+种子生成，无个人数据）
+!days/*/data/
+!days/*/data/*.jsonl
