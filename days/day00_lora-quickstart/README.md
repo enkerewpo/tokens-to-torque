@@ -223,6 +223,31 @@ $$
 
 ## 3. 动手
 
+### 3.0 准备环境（10 min）
+
+**先做这一步。** 后面所有 `python code/…` 都在容器里跑，宿主机上没有 torch/peft/trl，直接跑会 `ModuleNotFoundError`。
+
+在 Jetson 上用 NGC 的 PyTorch 容器：
+
+```bash
+cd days/day00_lora-quickstart
+source ../../common/env.sh                    # HF_HUB_DISABLE_XET=1 等
+bash ../../common/jetson_preflight.sh         # 任何一项 FAIL 就别起跑
+
+sudo docker run -d --name t2t-day00 --runtime nvidia --ipc=host --network host \
+  -e HF_HUB_DISABLE_XET=1 -e HF_HOME=/root/.cache/huggingface \
+  -v $HOME/.cache/huggingface:/root/.cache/huggingface \
+  -v $(pwd):/workspace -w /workspace \
+  nvcr.io/nvidia/pytorch:25.08-py3 sleep infinity
+
+sudo docker exec -it t2t-day00 bash code/setup_env.sh   # 装 pin 好的 trl/peft/transformers
+```
+
+容器起好后，后面每条命令前面加 `sudo docker exec -it t2t-day00`；嫌烦就 `sudo docker exec -it t2t-day00 bash` 进去一次，之后照抄命令即可。
+
+**用独显的机器**可以跳过容器，在自己的 conda 环境里跑一次 `bash code/setup_env.sh`，后面所有命令去掉 `sudo docker exec -it t2t-day00` 前缀。
+
+
 ### 3.1 准备数据集（2 min）
 
 仓库自带一份**演示数据集**，任何人 clone 下来都能直接用，不需要交出自己的任何数据：
@@ -252,24 +277,6 @@ sudo docker exec -it t2t-day00 python code/peek.py data/persona_demo.jsonl -n 3
 
 ### 3.3 微调（40–60 min）
 
-> [!IMPORTANT]
-> **下面所有 `python code/…` 都在容器里跑，不是在你的 Mac 或宿主机上。** 宿主机上没装 torch/peft/trl，直接跑会 `ModuleNotFoundError`。
->
-> 起一个常驻容器，之后每条命令前面加 `sudo docker exec -it t2t-day00`；或者 `sudo docker exec -it t2t-day00 bash` 进去一次，后面照抄命令即可。用独显的机器可以跳过容器，直接在自己的 conda 环境里跑 `bash code/setup_env.sh`。
-
-在 Jetson 上用 NGC 的 PyTorch 容器：
-
-```bash
-source ../../common/env.sh                    # HF_HUB_DISABLE_XET=1 等
-bash ../../common/jetson_preflight.sh        # 任何一项 FAIL 就别起跑
-sudo docker run -d --name t2t-day00 --runtime nvidia --ipc=host --network host \
-  -v $HOME/.cache/huggingface:/root/.cache/huggingface -v $(pwd):/workspace -w /workspace \
-  nvcr.io/nvidia/pytorch:25.08-py3 sleep infinity
-sudo docker exec -it t2t-day00 bash code/setup_env.sh   # 装 pin 好的 trl/peft/transformers
-```
-
-之后的 `python code/…` 都在容器里跑：`sudo docker exec -it t2t-day00 python code/…`。
-
 另开一个终端起遥测和看门狗：
 
 ```bash
@@ -297,7 +304,7 @@ sudo docker exec -it t2t-day00 python code/train_lora.py \
 sudo docker exec -it t2t-day00 python code/compare.py \
     --model Qwen/Qwen3.5-9B --adapter private/adapter \
     --prompts code/prompts.txt \
-    --out results/before_after.md
+    --out private/before_after.md
 ```
 
 ### 3.4b 量一下到底学到没有
