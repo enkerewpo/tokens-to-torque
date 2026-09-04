@@ -62,6 +62,9 @@ def rewrite_links(text: str, in_day: bool, in_sub: bool = None) -> str:
                       lambda m, d=dst: f"]({up}{d}{m.group(1) or ''})", text)
     text = re.sub(r"\]\((?:\.\./)*(common/[^)]*|templates/[^)]*|scripts/[^)]*|LICENSE)\)",
                   lambda m: f"]({GH}/{m.group(1)})", text)
+    # results/ 下的图片复制进站点本地引用；其余 code/ results/ 文件链到 GitHub
+    text = re.sub(r"\]\((results/[^)]*\.(?:png|jpg|jpeg|svg|gif))\)",
+                  lambda m: f"](assets/DAYDIR/{m.group(1)})", text)
     text = re.sub(r"\]\((code/[^)]*|results/[^)]*)\)",
                   lambda m: f"]({GH}/DAYDIR/{m.group(1)})", text)
     return text
@@ -90,6 +93,7 @@ def process(path: pathlib.Path, in_day: bool, daydir: str = "", in_sub: bool = N
 def main():
     for p in list(SRC.glob("*.md")) + list((SRC / "days").glob("*.md")) + list((SRC / "appendix").glob("*.md")):
         p.unlink()
+    shutil.rmtree(SRC / "days" / "assets", ignore_errors=True)
     (SRC / "days").mkdir(parents=True, exist_ok=True)
     (SRC / "appendix").mkdir(parents=True, exist_ok=True)
 
@@ -113,6 +117,13 @@ def main():
         title, body = process(readme, in_day=True, daydir=d.name)
         (SRC / "days" / f"day{num}.md").write_text(frontmatter(title) + body)
         days.append((num, title))
+        res = d / "results"
+        if res.is_dir():
+            dst = SRC / "days" / "assets" / d.name / "results"
+            dst.mkdir(parents=True, exist_ok=True)
+            for img in res.iterdir():
+                if img.suffix.lower() in (".png", ".jpg", ".jpeg", ".svg", ".gif"):
+                    shutil.copy2(img, dst / img.name)
 
     apps = []
     for f in sorted((ROOT / "appendix").glob("*.md")):

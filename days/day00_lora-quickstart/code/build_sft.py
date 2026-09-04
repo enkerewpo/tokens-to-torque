@@ -38,8 +38,12 @@ def main():
     ap.add_argument("--min-chars", type=int, default=40)
     ap.add_argument("--max-chars", type=int, default=2000)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--weight", nargs="*", default=[], metavar="SOURCE=N",
+                    help="按来源过采样，如 chat=4：聊天语料重复 4 遍。风格特征鲜明的来源"
+                         "（口癖、语气词、～）占比太低会被正式文本淹没，微调后看不出变化。")
     a = ap.parse_args()
     random.seed(a.seed)
+    weight = {k: int(v) for k, v in (w.split("=") for w in a.weight)}
 
     kept = dropped = 0
     with open(a.inp, encoding="utf-8") as fin, open(a.out, "w", encoding="utf-8") as fout:
@@ -50,12 +54,13 @@ def main():
                 dropped += 1
                 continue
             kind = rec["source"].split(":")[0]
-            instr = random.choice(TEMPLATES.get(kind, TEMPLATES["md"]))
-            fout.write(json.dumps(
-                {"messages": [{"role": "user", "content": instr},
-                              {"role": "assistant", "content": text}]},
-                ensure_ascii=False) + "\n")
-            kept += 1
+            for _ in range(weight.get(kind, 1)):
+                instr = random.choice(TEMPLATES.get(kind, TEMPLATES["md"]))
+                fout.write(json.dumps(
+                    {"messages": [{"role": "user", "content": instr},
+                                  {"role": "assistant", "content": text}]},
+                    ensure_ascii=False) + "\n")
+                kept += 1
     print(f"保留 {kept}，丢弃 {dropped} -> {a.out}")
     print("现在去手动翻一遍。删掉机械的、含隐私的、不像你的。这一步别跳过。")
 

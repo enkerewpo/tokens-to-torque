@@ -11,13 +11,17 @@ def generate(model, tok, prompt, max_new=256):
     msgs = [{"role": "user", "content": prompt}]
     # Qwen3/3.5 的模板默认开 thinking，会先输出一大段 <think>；对比语气要关掉。
     # 训练数据里没有 think 块，所以 adapter 学到的也是直接作答。
-    ids = tok.apply_chat_template(msgs, add_generation_prompt=True, enable_thinking=False,
-                                  return_tensors="pt").to(model.device)
+    # transformers 5.x：apply_chat_template 返回 BatchEncoding（dict），要 return_dict 再 **展开
+    enc = tok.apply_chat_template(msgs, add_generation_prompt=True, enable_thinking=False,
+                                  return_tensors="pt", return_dict=True).to(model.device)
     with torch.no_grad():
-        out = model.generate(ids, max_new_tokens=max_new, do_sample=True,
-                             temperature=0.7, top_p=0.9,
+        # Qwen 系列对话结束符是 <|im_end|>，不显式给的话 generate 可能不停，
+        # 一路生成到下一轮 "<|im_start|>user…"，decode 后就是 user/assistant 循环。
+        stop_ids = list({tok.convert_tokens_to_ids("<|im_end|>"), tok.eos_token_id})
+        out = model.generate(**enc, max_new_tokens=max_new, do_sample=True,
+                             temperature=0.7, top_p=0.9, eos_token_id=stop_ids,
                              pad_token_id=tok.pad_token_id or tok.eos_token_id)
-    return tok.decode(out[0][ids.shape[-1]:], skip_special_tokens=True).strip()
+    return tok.decode(out[0][enc["input_ids"].shape[-1]:], skip_special_tokens=True).strip()
 
 
 def main():

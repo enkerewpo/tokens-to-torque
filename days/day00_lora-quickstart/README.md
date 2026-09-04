@@ -218,8 +218,9 @@ python code/build_sft.py --in private/corpus.jsonl --out private/sft.jsonl --min
 ### 3.3 微调（40–60 min）
 
 ```bash
-source ../../common/env.sh
+source ../../common/env.sh                    # 含 HF_HUB_DISABLE_XET=1 等必要环境变量
 bash ../../common/jetson_preflight.sh        # 任何一项 FAIL 就别起跑
+bash code/setup_env.sh                       # 容器内装 pin 好的 trl/peft/transformers
 ```
 
 另开一个终端起遥测和看门狗：
@@ -235,7 +236,7 @@ nohup bash ../../common/jetson_watchdog.sh 'train_lora' 85 &
 python code/train_lora.py \
     --model <4B 级 instruct 模型> \
     --data private/sft.jsonl \
-    --out private/adapter-v1 \
+    --out private/adapter \
     --epochs 2 --rank 16 --batch 4
 ```
 
@@ -247,55 +248,37 @@ python code/train_lora.py \
 
 ```bash
 python code/compare.py \
-    --model <同一个模型> --adapter private/adapter-v1 \
+    --model <同一个模型> --adapter private/adapter \
     --prompts code/prompts.txt \
     --out results/before_after.md
 ```
 
 ## 4. 结果
 
-<!-- 跑完填。没有数字这天不算完成。 -->
+Jetson AGX Thor（120 W），Qwen3.5-9B bf16，LoRA r=16、α=32、`all-linear`，lr 2e-4 cosine、3 步 warmup，batch 4 × 累积 2，2 epoch，189 条样本。
 
-| | base | + LoRA adapter |
-|---|---|---|
-| 训练数据条数 | — | _ |
-| 可训练参数 / 总参数 | — | _ / _ |
-| 训练耗时 | — | _ min |
-| 峰值 tj 温度 | — | _ °C |
-| 峰值内存 | — | _ GB |
-| final train loss | — | _ |
+| | 值 |
+|---|---|
+| 可训练参数 / 总参数 | 43.3 M / 8.997 B = **0.48%** |
+| 训练耗时 | **3.2 min**（48 步） |
+| 峰值内存 | **23.7 GB** |
+| 峰值 tj 温度 | **56 °C** |
+| train loss | **4.42 → 2.82** |
+| mean token accuracy | 0.29 → 0.45 |
+| adapter 文件 | 166 MB |
 
-同题对比：见 [`results/before_after.md`](results/before_after.md)
+对照 §2.4：权重 18 GB + 43 M × 16 B ≈ 0.7 GB，其余约 5 GB 是激活值和 CUDA 工作区。数字和推算对得上。
 
-一句话结论：_待填_
+![训练曲线](results/training_curves.png)
+
+**效果。** 同一问题，base 给五级标题的长篇教程，adapter 给一两句笔记体，闲聊题也换成了口语——风格确实学到了。代价同样明显：它会把语料里的内容塞进无关问题，事实性变差。几百条样本只能改风格，改不了知识（§2.8）；口语语料占比越高，语气越明显。
 
 ## 5. 踩坑
 
-**环境（Jetson AGX Thor，JetPack 7.0）。** 用现成的 `nvcr.io/nvidia/pytorch:25.08-py3` 容器（教程写的是 25.11，但 33 GB 的新镜像没必要为此多拉），里面 `pip install trl peft datasets accelerate` 得到 transformers 5.16.1 / trl 1.12.0 / peft 0.20.0 / torch 2.8.0（NVIDIA 构建）。pip 会抱怨 cudf 的 pyarrow 版本冲突，与训练无关，忽略。
+环境和版本问题都已经写进 `code/setup_env.sh` 和 `common/env.sh`，照跑即可。只有两件事值得知道原理：
 
-**模型下载是这天最大的坑，占了一半时间。**
-
-1. `hf-mirror.com` 对这个仓库基本不可用：并行拉分片 30 秒 0 MB，单文件测速 13 B/s。
-2. 走代理后 API 通了（HTTP 200）但下载仍然 0 MB/s——原因是 `huggingface_hub` 1.30 默认用 **hf-xet** 传输，它不走 `HTTPS_PROXY`。`curl` 经同一个代理能跑到 7.7 MB/s，说明代理没问题。
-3. 解决：`HF_HUB_DISABLE_XET=1`，回退到普通 HTTP 下载，立刻 9 MB/s。18 GB 约半小时。
-
-一句话：**在需要代理的网络里，先 `export HF_HUB_DISABLE_XET=1`**，否则 `snapshot_download` 会静默卡死。
-
-**`docker exec` 喂 heredoc 要加 `-i`**，否则脚本在容器里静默不执行、什么都不输出。
-
-**`assistant_only_loss=True` 会报错。** 它需要 chat template 里有 `{% generation %}` 标记，Qwen3.5 的模板没有。改成 prompt/completion 格式（`prompt` = user 消息，`completion` = assistant 消息），TRL 对这种格式默认 `completion_only_loss=True`，不依赖模板，效果相同。
-
-**不要写死 `target_modules=["q_proj","k_proj","v_proj","o_proj"]`。** 在 meta 设备上按 config 建空模型一查（不用等权重下完），Qwen3.5-9B 是**混合架构**：32 层里 24 层是线性注意力（Gated DeltaNet，模块叫 `in_proj_qkv` / `in_proj_z` / `out_proj`），只有 8 层是标准注意力。只挂 q/k/v/o 只覆盖这 8 层：
-
-| target_modules（r=16） | 可训练参数 | 占比 |
-|---|---|---|
-| q/k/v/o_proj（仅 8 层全注意力） | 3.9 M | 0.04% |
-| + 线性注意力 in_proj_qkv / out_proj | 11.8 M | 0.13% |
-| **all-linear**（除 lm_head） | **43.3 M** | **0.48%** |
-
-§2.3 那个“每层 q/k/v/o 各一个 4096×4096”的算例是教学简化；真实模型的 `q_proj` 是 4096→8192（GQA，多头 Q 少头 KV），MLP 是 4096→12288。**先 `from_config` 到 meta 设备看一眼模块名和形状，再决定挂哪里**——这一步 5 秒，能省掉训完发现没学到东西的一小时。
-
-<!-- 训练阶段的坑跑完继续填 -->
+1. **LoRA 挂在哪要看模型结构，不要照抄 `q_proj,k_proj,v_proj,o_proj`。** Qwen3.5-9B 是混合架构：32 层里 24 层是线性注意力（模块叫 `in_proj_qkv` / `out_proj`），只有 8 层有 `q/k/v/o_proj`。照抄只覆盖 **3.9 M（0.04%）** 参数；`target_modules="all-linear"` 是 **43.3 M（0.48%）**。查法：`AutoModelForCausalLM.from_config(cfg)` 在 meta 设备上建空模型，列 `nn.Linear` 的名字和形状，不用等权重。
+2. **只对 assistant 算 loss 有两条路。** `assistant_only_loss=True` 要求 chat template 带 `{% generation %}` 标记，Qwen3.5 没有；改成 prompt/completion 格式，TRL 默认 `completion_only_loss=True`，不依赖模板。
 
 ## 6. 延伸
 

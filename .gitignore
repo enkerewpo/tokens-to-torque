@@ -37,6 +37,7 @@ data/personal/
 # site/ 是渲染产物。源头是仓库根目录的 md 和 days/*/README.md。
 site_src/*.md
 site_src/days/
+site_src/days/assets/
 site_src/_quarto.yml
 site_src/_site/
 site_src/.quarto/
@@ -57,3 +58,7 @@ venv/
 # agent 的本地状态不进仓库，但 .claude/skills/ 要进（那是给学习者的）
 .claude/settings.local.json
 .claude/memory/
+
+# results/ 只放图；模型输出文本含个人内容，不进仓库
+days/*/results/*.md
+days/*/results/*.json
