@@ -16,14 +16,17 @@ website:
     location: navbar
     type: overlay
   navbar:
+    logo: assets/logo.svg
+    logo-alt: "tokens to torque"
+    title: false
     left:
       - text: 课表
         href: roadmap.md
-      - text: 环境与安全
+      - text: 环境
         href: setup.md
       - text: 资源
         href: resources.md
-      - text: 用 agent 跟做
+      - text: Agent
         href: agents.md
     right:
       - icon: github

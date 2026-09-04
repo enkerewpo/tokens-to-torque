@@ -70,6 +70,13 @@ def rewrite_links(text: str, in_day: bool, in_sub: bool = None) -> str:
     return text
 
 
+def write(path: pathlib.Path, content: str, written: set) -> None:
+    """内容没变就不写，避免 preview 反复重渲染。"""
+    written.add(path)
+    if not path.exists() or path.read_text() != content:
+        path.write_text(content)
+
+
 def frontmatter(title: str) -> str:
     return f'---\ntitle: "{title}"\n---\n\n'
 
@@ -91,11 +98,12 @@ def process(path: pathlib.Path, in_day: bool, daydir: str = "", in_sub: bool = N
 
 
 def main():
-    for p in list(SRC.glob("*.md")) + list((SRC / "days").glob("*.md")) + list((SRC / "appendix").glob("*.md")):
-        p.unlink()
-    shutil.rmtree(SRC / "days" / "assets", ignore_errors=True)
+    # 注意：不要"先删光再重写"。quarto preview 在监听这些文件，
+    # 删除到重写之间的空窗期会让它扫到文件消失并卡在 Render Error。
+    # 改成先写新内容、最后再清理这一轮没生成的旧文件。
     (SRC / "days").mkdir(parents=True, exist_ok=True)
     (SRC / "appendix").mkdir(parents=True, exist_ok=True)
+    written: set[pathlib.Path] = set()
 
     for src, dst in TOP.items():
         f = ROOT / src
@@ -105,7 +113,7 @@ def main():
         # 首页的居中横幅在 Quarto 里由 frontmatter 接管，去掉原来的 <div>
         if dst == "index.md":
             body = re.sub(r'<div align="center">\n(.*?)\n</div>', r"\1", body, flags=re.S)
-        (SRC / dst).write_text(frontmatter(title) + body)
+        write(SRC / dst, frontmatter(title) + body, written)
 
     days = []
     for d in sorted((ROOT / "days").iterdir()):
@@ -115,7 +123,7 @@ def main():
             continue
         num = m.group(1)
         title, body = process(readme, in_day=True, daydir=d.name)
-        (SRC / "days" / f"day{num}.md").write_text(frontmatter(title) + body)
+        write(SRC / "days" / f"day{num}.md", frontmatter(title) + body, written)
         days.append((num, title))
         res = d / "results"
         if res.is_dir():
@@ -128,7 +136,7 @@ def main():
     apps = []
     for f in sorted((ROOT / "appendix").glob("*.md")):
         title, body = process(f, in_day=False, in_sub=True)
-        (SRC / "appendix" / f.name).write_text(frontmatter(title) + body)
+        write(SRC / "appendix" / f.name, frontmatter(title) + body, written)
         apps.append((f.stem, title))
     apps.sort(key=lambda a: a[1])          # 按标题「附录 A/B/C」排序，而不是按文件名
 
@@ -137,6 +145,10 @@ def main():
                         for n, t in days) or "          - text: (还没开始)\n            href: index.md"
     app_entries = "\n".join(f"          - text: \"{t}\"\n            href: appendix/{n}.md" for n, t in apps)
     (SRC / "_quarto.yml").write_text(tpl.replace("__DAYS__", entries).replace("__APPENDIX__", app_entries))
+
+    for stale in list(SRC.glob("*.md")) + list((SRC / "days").glob("*.md")) + list((SRC / "appendix").glob("*.md")):
+        if stale not in written:
+            stale.unlink()
 
     print(f"site_src/ 生成完毕：{len(TOP)} 个顶层页 + {len(days)} 天 + {len(apps)} 个附录")
     for n, t in days:

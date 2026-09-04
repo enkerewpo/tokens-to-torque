@@ -48,7 +48,7 @@ Jetson 特有的内容（统一内存、功耗墙、`nvpmodel`、NVFP4 部署）
 
 | Phase | 主题 | Days | 进度 |
 |---|---|---|---|
-| 0 | [Quickstart — 先训一个自己的模型](days/day00_lora-quickstart/) | 00 | 1 / 1 |
+| 0 | [Quickstart — 微调入门](days/day00_lora-quickstart/) | 00 | 1 / 1 |
 | 1 | Serving — 把模型跑起来并测准 | 01–12 | 0 / 12 |
 | 2 | CUDA — 从 kernel 到 profile | 13–24 | 0 / 12 |
 | 3 | Training — 从零训到微调 | 25–36 | 0 / 12 |
@@ -62,7 +62,7 @@ Jetson 特有的内容（统一内存、功耗墙、`nvpmodel`、NVFP4 部署）
 
 | Day | 主题 | 产出 |
 |---|---|---|
-| [00](days/day00_lora-quickstart/) | LoRA 微调一个会用我语气说话的模型 | adapter + before/after 对话 |
+| [00](days/day00_lora-quickstart/) | 用 LoRA 微调一个 9B 模型 | adapter + 风格命中率 |
 
 </details>
 

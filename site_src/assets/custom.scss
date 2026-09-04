@@ -6,6 +6,33 @@ $body-color: #24292f !default;
 $link-color: #0b7285 !default;
 
 /*-- scss:rules --*/
+/* ---- 导航栏 ---- */
+.navbar {
+  border-bottom: 1px solid rgba(0, 0, 0, .08);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .04);
+  padding-block: .45rem;
+}
+.navbar-brand-container { gap: .6rem; }
+.navbar-logo { height: 24px; width: auto; max-height: 24px; color: #1A1A1A; }
+/* 站名：等宽小写 + 收紧字距，箭头用绿色点出来 */
+.navbar-title {
+  font-family: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+  font-weight: 600;
+  font-size: 1.02rem;
+  letter-spacing: -.015em;
+  color: #1A1A1A;
+}
+.navbar .nav-link {
+  font-size: .92rem;
+  font-weight: 500;
+  letter-spacing: .01em;
+  padding-inline: .7rem !important;
+  border-radius: 6px;
+  transition: background .15s ease, color .15s ease;
+}
+.navbar .nav-link:hover { background: rgba(118, 185, 0, .12); color: #4a7500; }
+.navbar .nav-link.active { color: #4a7500; font-weight: 600; }
+
 /* 中文正文行距要比英文松，否则很挤 */
 body { line-height: 1.75; letter-spacing: 0.01em; }
 h1, h2, h3 { letter-spacing: 0; }

@@ -4,6 +4,23 @@ $font-family-sans-serif: -apple-system, BlinkMacSystemFont, "Segoe UI",
 $font-family-monospace: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace !default;
 
 /*-- scss:rules --*/
+/* darkly 默认导航栏是蓝灰色，和页面深灰撞色，改成中性深色 */
+.navbar {
+  background-color: #1b1e21 !important;
+  border-bottom: 1px solid rgba(255, 255, 255, .09);
+  box-shadow: none;
+  padding-block: .45rem;
+}
+.navbar-brand-container { gap: .6rem; }
+.navbar-logo { height: 24px; width: auto; max-height: 24px; color: #E8E8E8; }
+.navbar-title {
+  font-family: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+  font-weight: 600; font-size: 1.02rem; letter-spacing: -.015em; color: #E8E8E8;
+}
+.navbar .nav-link { font-size: .92rem; font-weight: 500; padding-inline: .7rem !important; border-radius: 6px; }
+.navbar .nav-link:hover { background: rgba(118, 185, 0, .18); color: #9BD62F; }
+.navbar .nav-link.active { color: #9BD62F; font-weight: 600; }
+
 body { line-height: 1.75; letter-spacing: 0.01em; }
 .katex-display { overflow-x: auto; overflow-y: hidden; padding: 0.3rem 0; }
 .table-responsive, table { display: block; overflow-x: auto; max-width: 100%; }
