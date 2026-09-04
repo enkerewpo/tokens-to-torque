@@ -50,6 +50,7 @@
 **结束一天：**
 
 1. 六节写全（缺一节不算完成）：为什么学 / 背景 / 动手 / 结果 / 踩坑 / 延伸
+2. `python scripts/check_footnotes.py`——整段改写正文时很容易连带删掉文末的脚注定义，Quarto 不报错，只会渲染出字面量 `[^key]`
 2. 数字填进 §4
 3. `python scripts/build_docs.py && quarto render site_src` 确认站点能构建
 4. `git status` 逐条看一遍再 commit——**特别注意有没有 private/ 里的东西溜出来**

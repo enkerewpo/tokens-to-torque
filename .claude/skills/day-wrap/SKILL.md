@@ -23,9 +23,12 @@ description: 收尾课表里的一天。当用户说 "今天完了"、"收尾"�
 ## 2. 站点能构建
 
 ```bash
+python scripts/check_footnotes.py     # 引用与定义一一对应
 python scripts/build_docs.py
 quarto render site_src
 ```
+
+脚注这一步单独查，是因为整段替换文本时很容易把文末的定义一起删掉，而 Quarto 只会把 `[^key]` 原样渲染成字面量，不报错。
 
 提示框在源码里用 **GitHub alert 语法**（`> [!NOTE]` / `> [!WARNING]` / `> [!CAUTION]` / `> [!TIP]` / `> [!IMPORTANT]`），这样直接在 GitHub 上看仓库也能正常渲染；构建时 `build_docs.py` 会把它转成 Quarto 的 callout。想给提示框加标题，就在 `> [!NOTE]` 下一行写 `> **标题**`。
 
