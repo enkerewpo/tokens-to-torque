@@ -30,6 +30,37 @@ def generate(model, tok, prompt, max_new=256):
     return tok.decode(out[0][enc["input_ids"].shape[-1]:], skip_special_tokens=True).strip()
 
 
+
+def _need(path, what):
+    """路径不存在就立刻说清楚，别等加载完 18 GB 才报错。"""
+    import os, sys
+    if not os.path.exists(path):
+        sys.exit(f"找不到 {what}：{path}\n"
+                 f"先跑 §3.3 的训练生成它：\n"
+                 f"  python code/train_lora.py --model Qwen/Qwen3.5-9B \\\n"
+                 f"      --data data/persona_demo.jsonl --out private/adapter \\\n"
+                 f"      --epochs 3 --rank 16 --batch 4 --lr 1e-4")
+
+
+def _load(model_id, adapter):
+    """加载 base + adapter，每一步都报进度——9B 模型要几十秒，静默会让人以为卡死。"""
+    import time, torch
+    from peft import PeftModel
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    _need(adapter, "adapter")
+    t0 = time.time()
+    print(f"加载 {model_id}（9B，约 18 GB；首次从磁盘读盘要几十秒）…", flush=True)
+    tok = AutoTokenizer.from_pretrained(model_id)
+    if tok.pad_token is None:
+        tok.pad_token = tok.eos_token
+    print(f"  tokenizer 就绪（{time.time() - t0:.0f}s）", flush=True)
+    base = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map="cuda").eval()
+    print(f"  base 模型就绪（{time.time() - t0:.0f}s）", flush=True)
+    model = PeftModel.from_pretrained(base, adapter).eval()
+    print(f"  adapter 就绪（{time.time() - t0:.0f}s）\n", flush=True)
+    return tok, base, model
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True)
@@ -39,15 +70,10 @@ def main():
     a = ap.parse_args()
 
     prompts = [l.strip() for l in open(a.prompts, encoding="utf-8") if l.strip()]
-    tok = AutoTokenizer.from_pretrained(a.model)
-    if tok.pad_token is None:
-        tok.pad_token = tok.eos_token
-
-    base = AutoModelForCausalLM.from_pretrained(
-        a.model, torch_dtype=torch.bfloat16, device_map="cuda").eval()
-    base_out = [generate(base, tok, p) for p in prompts]
-
-    tuned = PeftModel.from_pretrained(base, a.adapter).eval()
+    tok, base, tuned = _load(a.model, a.adapter)
+    print(f"生成 {len(prompts)} 组对比…", flush=True)
+    with tuned.disable_adapter():
+        base_out = [generate(tuned, tok, p) for p in prompts]
     tuned_out = [generate(tuned, tok, p) for p in prompts]
 
     pathlib.Path(a.out).parent.mkdir(parents=True, exist_ok=True)
