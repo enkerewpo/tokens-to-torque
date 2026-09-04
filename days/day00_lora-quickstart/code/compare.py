@@ -9,7 +9,9 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 def generate(model, tok, prompt, max_new=256):
     msgs = [{"role": "user", "content": prompt}]
-    ids = tok.apply_chat_template(msgs, add_generation_prompt=True,
+    # Qwen3/3.5 的模板默认开 thinking，会先输出一大段 <think>；对比语气要关掉。
+    # 训练数据里没有 think 块，所以 adapter 学到的也是直接作答。
+    ids = tok.apply_chat_template(msgs, add_generation_prompt=True, enable_thinking=False,
                                   return_tensors="pt").to(model.device)
     with torch.no_grad():
         out = model.generate(ids, max_new_tokens=max_new, do_sample=True,

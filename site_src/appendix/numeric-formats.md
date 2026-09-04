@@ -75,7 +75,7 @@ fp32 和 fp16 是 IEEE 754 标准[^ieee]；bf16 是 Google 为 TPU 设计的[^bf
 
 <!-- 参考文献用脚注 [^key] 写在这里，站点会自动汇总到文末的「参考文献」区 -->
 
-[^ieee]: IEEE Std 754-2019, *IEEE Standard for Floating-Point Arithmetic*. binary32 与 binary16 的位布局见 §3.4、§3.6。
-[^bf16]: Wang, S. & Kanwar, P. "BFloat16: The secret to high performance on Cloud TPUs." Google Cloud Blog, 2019.
-[^fp8]: Micikevicius, P. et al. "FP8 Formats for Deep Learning." 2022. arXiv:2209.05433.
-[^mixed]: Micikevicius, P. et al. "Mixed Precision Training." *ICLR* 2018. arXiv:1710.03740. fp32 主副本与 loss scaling 都出自这篇。
+[^ieee]: IEEE Std 754-2019, *IEEE Standard for Floating-Point Arithmetic*. [doi:10.1109/IEEESTD.2019.8766229](https://doi.org/10.1109/IEEESTD.2019.8766229) binary32 与 binary16 的位布局见 §3.4、§3.6。
+[^bf16]: Wang, S. & Kanwar, P. ["BFloat16: The secret to high performance on Cloud TPUs."](https://cloud.google.com/blog/products/ai-machine-learning/bfloat16-the-secret-to-high-performance-on-cloud-tpus) Google Cloud Blog, 2019.
+[^fp8]: Micikevicius, P. et al. "FP8 Formats for Deep Learning." 2022. [arXiv:2209.05433](https://arxiv.org/abs/2209.05433).
+[^mixed]: Micikevicius, P. et al. "Mixed Precision Training." [*ICLR* 2018](https://openreview.net/forum?id=r1gs9JgRZ). [arXiv:1710.03740](https://arxiv.org/abs/1710.03740). fp32 主副本与 loss scaling 都出自这篇。

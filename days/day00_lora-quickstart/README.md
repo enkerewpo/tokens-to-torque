@@ -271,10 +271,31 @@ python code/compare.py \
 
 ## 5. 踩坑
 
-<!-- 跑完填。这一节往往最有用。 -->
+**环境（Jetson AGX Thor，JetPack 7.0）。** 用现成的 `nvcr.io/nvidia/pytorch:25.08-py3` 容器（教程写的是 25.11，但 33 GB 的新镜像没必要为此多拉），里面 `pip install trl peft datasets accelerate` 得到 transformers 5.16.1 / trl 1.12.0 / peft 0.20.0 / torch 2.8.0（NVIDIA 构建）。pip 会抱怨 cudf 的 pyarrow 版本冲突，与训练无关，忽略。
 
-- 版本 pin：`torch` / `transformers` / `trl` / `peft` 的实际可用版本组合 → _待填_
-- _待填_
+**模型下载是这天最大的坑，占了一半时间。**
+
+1. `hf-mirror.com` 对这个仓库基本不可用：并行拉分片 30 秒 0 MB，单文件测速 13 B/s。
+2. 走代理后 API 通了（HTTP 200）但下载仍然 0 MB/s——原因是 `huggingface_hub` 1.30 默认用 **hf-xet** 传输，它不走 `HTTPS_PROXY`。`curl` 经同一个代理能跑到 7.7 MB/s，说明代理没问题。
+3. 解决：`HF_HUB_DISABLE_XET=1`，回退到普通 HTTP 下载，立刻 9 MB/s。18 GB 约半小时。
+
+一句话：**在需要代理的网络里，先 `export HF_HUB_DISABLE_XET=1`**，否则 `snapshot_download` 会静默卡死。
+
+**`docker exec` 喂 heredoc 要加 `-i`**，否则脚本在容器里静默不执行、什么都不输出。
+
+**`assistant_only_loss=True` 会报错。** 它需要 chat template 里有 `{% generation %}` 标记，Qwen3.5 的模板没有。改成 prompt/completion 格式（`prompt` = user 消息，`completion` = assistant 消息），TRL 对这种格式默认 `completion_only_loss=True`，不依赖模板，效果相同。
+
+**不要写死 `target_modules=["q_proj","k_proj","v_proj","o_proj"]`。** 在 meta 设备上按 config 建空模型一查（不用等权重下完），Qwen3.5-9B 是**混合架构**：32 层里 24 层是线性注意力（Gated DeltaNet，模块叫 `in_proj_qkv` / `in_proj_z` / `out_proj`），只有 8 层是标准注意力。只挂 q/k/v/o 只覆盖这 8 层：
+
+| target_modules（r=16） | 可训练参数 | 占比 |
+|---|---|---|
+| q/k/v/o_proj（仅 8 层全注意力） | 3.9 M | 0.04% |
+| + 线性注意力 in_proj_qkv / out_proj | 11.8 M | 0.13% |
+| **all-linear**（除 lm_head） | **43.3 M** | **0.48%** |
+
+§2.3 那个“每层 q/k/v/o 各一个 4096×4096”的算例是教学简化；真实模型的 `q_proj` 是 4096→8192（GQA，多头 Q 少头 KV），MLP 是 4096→12288。**先 `from_config` 到 meta 设备看一眼模块名和形状，再决定挂哪里**——这一步 5 秒，能省掉训完发现没学到东西的一小时。
+
+<!-- 训练阶段的坑跑完继续填 -->
 
 ## 6. 延伸
 
@@ -285,8 +306,8 @@ python code/compare.py \
 
 <!-- 参考文献用脚注 [^key] 写在这里，站点会自动汇总到文末的「参考文献」区 -->
 
-[^adam]: Loshchilov, I. & Hutter, F. "Decoupled Weight Decay Regularization." *ICLR* 2019. arXiv:1711.05101（AdamW；Adam 本身见 Kingma & Ba, *ICLR* 2015, arXiv:1412.6980）。
-[^zero]: Rajbhandari, S. et al. "ZeRO: Memory Optimizations Toward Training Trillion Parameter Models." *SC* 2020. arXiv:1910.02054. §3 的混合精度 Adam 内存账：每参数 16 字节。
-[^strang]: Strang, G. *Introduction to Linear Algebra*, 5th ed. Wellesley-Cambridge Press, 2016. 行秩等于列秩：§3.5；秩–零化度定理：§3.6；SVD 与秩：§7.1。
-[^aghajanyan]: Aghajanyan, A., Zettlemoyer, L. & Gupta, S. "Intrinsic Dimensionality Explains the Effectiveness of Language Model Fine-Tuning." *ACL* 2021. arXiv:2012.13255.
-[^lora]: Hu, E. J. et al. "LoRA: Low-Rank Adaptation of Large Language Models." *ICLR* 2022. arXiv:2106.09685. 低秩假设的实验证据在 §7。
+[^adam]: Loshchilov, I. & Hutter, F. "Decoupled Weight Decay Regularization." [*ICLR* 2019](https://openreview.net/forum?id=Bkg6RiCqY7). [arXiv:1711.05101](https://arxiv.org/abs/1711.05101)（AdamW；Adam 本身见 Kingma & Ba, *ICLR* 2015, [arXiv:1412.6980](https://arxiv.org/abs/1412.6980)）。
+[^zero]: Rajbhandari, S. et al. "ZeRO: Memory Optimizations Toward Training Trillion Parameter Models." [*SC* 2020](https://doi.org/10.1109/SC41405.2020.00024). [arXiv:1910.02054](https://arxiv.org/abs/1910.02054). §3 的混合精度 Adam 内存账：每参数 16 字节。
+[^strang]: Strang, G. [*Introduction to Linear Algebra*](https://math.mit.edu/~gs/linearalgebra/), 5th ed. Wellesley-Cambridge Press, 2016. 行秩等于列秩：§3.5；秩–零化度定理：§3.6；SVD 与秩：§7.1。
+[^aghajanyan]: Aghajanyan, A., Zettlemoyer, L. & Gupta, S. "Intrinsic Dimensionality Explains the Effectiveness of Language Model Fine-Tuning." [*ACL* 2021](https://aclanthology.org/2021.acl-long.568/). [arXiv:2012.13255](https://arxiv.org/abs/2012.13255).
+[^lora]: Hu, E. J. et al. "LoRA: Low-Rank Adaptation of Large Language Models." [*ICLR* 2022](https://openreview.net/forum?id=nZeVKeeFYf9). [arXiv:2106.09685](https://arxiv.org/abs/2106.09685). 低秩假设的实验证据在 §7。

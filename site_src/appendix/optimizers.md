@@ -130,7 +130,7 @@ $m$、$v$ 必须是 fp32：它们每步只变一点点（$v$ 每步加 $0.001\,g
 
 <!-- 参考文献用脚注 [^key] 写在这里，站点会自动汇总到文末的「参考文献」区 -->
 
-[^polyak]: Polyak, B. T. "Some methods of speeding up the convergence of iteration methods." *USSR Computational Mathematics and Mathematical Physics* 4(5):1–17, 1964. 深度学习里的用法见 Sutskever et al., *ICML* 2013。
-[^rmsprop]: Tieleman, T. & Hinton, G. "Lecture 6.5 — RMSProp." Coursera *Neural Networks for Machine Learning*, 2012.
-[^adam]: Kingma, D. P. & Ba, J. "Adam: A Method for Stochastic Optimization." *ICLR* 2015. arXiv:1412.6980. 算法见 Algorithm 1，偏差修正的推导见 §3。
-[^adamw]: Loshchilov, I. & Hutter, F. "Decoupled Weight Decay Regularization." *ICLR* 2019. arXiv:1711.05101.
+[^polyak]: Polyak, B. T. "Some methods of speeding up the convergence of iteration methods." *USSR Computational Mathematics and Mathematical Physics* 4(5):1–17, 1964. [doi:10.1016/0041-5553(64)90137-5](https://doi.org/10.1016/0041-5553(64)90137-5) 深度学习里的用法见 [Sutskever et al., *ICML* 2013](https://proceedings.mlr.press/v28/sutskever13.html)。
+[^rmsprop]: Tieleman, T. & Hinton, G. ["Lecture 6.5 — RMSProp."](https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf) Coursera *Neural Networks for Machine Learning*, 2012.
+[^adam]: Kingma, D. P. & Ba, J. "Adam: A Method for Stochastic Optimization." [*ICLR* 2015](https://openreview.net/forum?id=8gmWwjFyLj). [arXiv:1412.6980](https://arxiv.org/abs/1412.6980). 算法见 Algorithm 1，偏差修正的推导见 §3。
+[^adamw]: Loshchilov, I. & Hutter, F. "Decoupled Weight Decay Regularization." [*ICLR* 2019](https://openreview.net/forum?id=Bkg6RiCqY7). [arXiv:1711.05101](https://arxiv.org/abs/1711.05101).

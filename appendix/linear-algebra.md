@@ -288,6 +288,6 @@ $$
 
 <!-- 参考文献用脚注 [^key] 写在这里，站点会自动汇总到文末的「参考文献」区 -->
 
-[^eckart]: Eckart, C. & Young, G. "The approximation of one matrix by another of lower rank." *Psychometrika* 1(3):211–218, 1936.
-[^lora]: Hu, E. J. et al. "LoRA: Low-Rank Adaptation of Large Language Models." *ICLR* 2022. arXiv:2106.09685.
-[^strang]: Strang, G. *Introduction to Linear Algebra*, 5th ed. Wellesley-Cambridge Press, 2016. 线性组合与 $A\mathbf{x}$：§2.1；子空间与张成：§3.1；线性无关：§3.4；基、维数、秩、行秩=列秩：§3.5；零空间与秩–零化度：§3.6；内积与长度：§1.2；标准正交矩阵：§4.4；SVD：§7.1–7.2。中文可用清华大学出版社影印版；MIT OCW 18.06 是配套公开课。
+[^eckart]: Eckart, C. & Young, G. "The approximation of one matrix by another of lower rank." *Psychometrika* 1(3):211–218, 1936. [doi:10.1007/BF02288367](https://doi.org/10.1007/BF02288367)
+[^lora]: Hu, E. J. et al. "LoRA: Low-Rank Adaptation of Large Language Models." [*ICLR* 2022](https://openreview.net/forum?id=nZeVKeeFYf9). [arXiv:2106.09685](https://arxiv.org/abs/2106.09685).
+[^strang]: Strang, G. [*Introduction to Linear Algebra*](https://math.mit.edu/~gs/linearalgebra/), 5th ed. Wellesley-Cambridge Press, 2016. 线性组合与 $A\mathbf{x}$：§2.1；子空间与张成：§3.1；线性无关：§3.4；基、维数、秩、行秩=列秩：§3.5；零空间与秩–零化度：§3.6；内积与长度：§1.2；标准正交矩阵：§4.4；SVD：§7.1–7.2。中文可用清华大学出版社影印版；[MIT OCW 18.06](https://ocw.mit.edu/courses/18-06-linear-algebra-spring-2010/) 是配套公开课。
