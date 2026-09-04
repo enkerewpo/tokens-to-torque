@@ -13,6 +13,11 @@ from peft import LoraConfig
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import SFTConfig, SFTTrainer
 
+import pathlib as _pl, sys as _sys
+_sys.path.insert(0, str(_pl.Path(__file__).resolve().parents[3] / "common"))
+from cli import step, info, kv, done  # noqa: E402
+
+
 
 def read_jsonl(path):
     with open(path, encoding="utf-8") as f:
@@ -64,7 +69,11 @@ def main():
         return {"input_ids": ids, "completion_mask": mask}
 
     rows = [encode(r) for r in read_jsonl(a.data)]
-    print(f"数据 {len(rows)} 条；起始 tj={tj_celsius()}C；样例长度 {len(rows[0]['input_ids'])} token")
+    step("Dataset")
+    kv("samples", len(rows))
+    kv("first sample length", len(rows[0]["input_ids"]), "tokens")
+    if tj_celsius() is not None:
+        kv("junction temp at start", f"{tj_celsius()}C")
     ds = Dataset.from_list(rows)
 
     model = AutoModelForCausalLM.from_pretrained(
@@ -102,7 +111,9 @@ def main():
 
     trainer = SFTTrainer(model=model, args=cfg, train_dataset=ds,
                          processing_class=tok, peft_config=peft_cfg)
+    step("Model")
     trainer.model.print_trainable_parameters()
+    step(f"Training: {a.epochs} epochs, lr {a.lr}, rank {a.rank}")
 
     t0 = time.time()
     trainer.train()
@@ -110,9 +121,13 @@ def main():
 
     trainer.save_model(a.out)
     peak = torch.cuda.max_memory_allocated() / 1024**3
-    print(f"\n完成：{dt:.1f} min，峰值显存 {peak:.1f} GB，结束 tj={tj_celsius()}C")
-    print(f"adapter -> {a.out}")
-    print("把这三个数字填进 days/day00_lora-quickstart/README.md 的结果表。")
+    step("Done")
+    kv("wall time", f"{dt:.1f}", "min")
+    kv("peak GPU memory", f"{peak:.1f}", "GB")
+    if tj_celsius() is not None:
+        kv("junction temp at end", f"{tj_celsius()}C")
+    info(f"adapter written to {a.out}")
+    done("Put these numbers in the results table of the day README")
 
 
 if __name__ == "__main__":
