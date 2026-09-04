@@ -19,7 +19,7 @@ import torch
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "common"))
 from _common import load, render, stop_ids  # noqa: E402
-from cli import GREEN, R, info, ok, step  # noqa: E402
+from cli import GREEN, RED, R, info, ok, step, warn  # noqa: E402
 
 MARKERS = {
     "tilde ～ at clause end": re.compile("～"),
@@ -35,6 +35,10 @@ def main():
     ap.add_argument("--prompts", required=True)
     ap.add_argument("--out", default="")
     ap.add_argument("--max-new", type=int, default=120)
+    ap.add_argument("--probes", default="code/probes.txt",
+                    help="factual questions unrelated to the training data, "
+                         "'question|keyword|keyword' per line, used to check "
+                         "the model did not overfit into forgetting things")
     a = ap.parse_args()
 
     prompts = [l.strip() for l in open(a.prompts, encoding="utf-8") if l.strip()]
@@ -76,6 +80,39 @@ def main():
         na = sum(1 for r in rows if rx.search(r["adapter"]))
         stats[name] = (nb, na, len(rows))
         print(f"  {name:<30}{nb:>7}/{len(rows)}{GREEN}{na:>9}{R}/{len(rows)}")
+
+    # Knowledge retention. Style transfer is only half the job: if the adapter
+    # answers an unrelated factual question by reciting training data, it has
+    # overfitted. These probes are off-domain on purpose.
+    probes = []
+    if pathlib.Path(a.probes).exists():
+        for line in open(a.probes, encoding="utf-8"):
+            line = line.strip()
+            if line:
+                q, *keys = line.split("|")
+                probes.append((q, keys))
+    if probes:
+        step("Knowledge retention on off-domain questions")
+        print(f"  {'question':<34}{'base':>8}{'adapter':>10}")
+        hit_b = hit_a = 0
+        for q, keys in probes:
+            with model.disable_adapter():
+                b = gen(q)
+            t = gen(q)
+            okb = any(k in b for k in keys)
+            oka = any(k in t for k in keys)
+            hit_b += okb
+            hit_a += oka
+            mark = lambda v: f"{GREEN}✓{R}" if v else f"{RED}✗{R}"
+            print(f"  {q[:32]:<34}{mark(okb):>16}{mark(oka):>18}")
+            rows.append({"prompt": q, "base": b, "adapter": t, "probe": True})
+        stats["knowledge"] = (hit_b, hit_a, len(probes))
+        print()
+        if hit_a < hit_b:
+            warn(f"adapter lost {hit_b - hit_a}/{len(probes)} — overfitted. "
+                 f"Try fewer epochs or a lower learning rate.")
+        else:
+            ok("knowledge retained")
 
     if a.out:
         pathlib.Path(a.out).parent.mkdir(parents=True, exist_ok=True)
