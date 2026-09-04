@@ -10,10 +10,6 @@
 
 **没跑出数字的一天不算完成。**
 
----
-
----
-
 ## Jetson 环境
 
 JetPack 7.0（Jetson Linux / Ubuntu 22.04 系）。**PyTorch / vLLM / SGLang 一律用 NGC 的 Jetson wheel 或容器**，不要装 pypi 上的通用包——通用 wheel 没有 `sm_110` 的 kernel，装上也跑不了。
@@ -39,8 +35,6 @@ source common/env.sh
 - **没有 RT core。**
 - **统一内存 122 GB**：CPU 和 GPU 共享，没有独立显存。x86 教程里大段的 H2D/D2H 拷贝优化在这里不适用——这个差异本身就是 day 23 的研究点。
 - **反过来，122 GB 的统一内存让 Thor 塞得下同价位独显塞不下的模型**，微调时它反而是优势那一方。
-
----
 
 ## Jetson 安全
 
@@ -94,8 +88,6 @@ ssh "$THOR" "bash common/jetson_stop.sh 'train_|vllm'"
 
 - [Jetson Thor Platform Power and Performance — Jetson Linux Developer Guide r38.2.1](https://docs.nvidia.com/jetson/archives/r38.2.1/DeveloperGuide/SD/PlatformPowerAndPerformance/JetsonThor.html)
 - [Jetson Thor Series Modules Thermal Design Guide (TDG-12271-001)](https://developer.nvidia.com/downloads/assets/embedded/secure/jetson/thor/docs/jetson_thor_thermal_dg_tdg12271001.pdf)
-
----
 
 
 ## 本地

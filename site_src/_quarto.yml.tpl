@@ -47,6 +47,7 @@ __APPENDIX__
 
 format:
   html:
+    from: markdown+autolink_bare_uris+emoji
     theme:
       light: [cosmo, assets/custom.scss]
       dark: [darkly, assets/custom-dark.scss]
