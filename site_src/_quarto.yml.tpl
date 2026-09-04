@@ -49,8 +49,8 @@ __DAYS__
         contents:
 __APPENDIX__
   page-footer:
-    left: "MIT · wheatfox"
-    right: "用 [Quarto](https://quarto.org) 构建"
+    left: "基于 [MIT 许可证](https://github.com/enkerewpo/tokens-to-torque/blob/main/LICENSE)发布 · 作者 [wheatfox](https://www.oscommunity.cn/)"
+    right: "用 [Quarto](https://quarto.org) 构建，托管在 GitHub Pages"
 
 format:
   html:
