@@ -119,6 +119,7 @@ def main():
         title, body = process(f, in_day=False, in_sub=True)
         (SRC / "appendix" / f.name).write_text(frontmatter(title) + body)
         apps.append((f.stem, title))
+    apps.sort(key=lambda a: a[1])          # 按标题「附录 A/B/C」排序，而不是按文件名
 
     tpl = (SRC / "_quarto.yml.tpl").read_text()
     entries = "\n".join(f"          - text: \"{t}\"\n            href: days/day{n}.md"
