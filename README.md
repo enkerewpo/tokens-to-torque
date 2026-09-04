@@ -6,7 +6,7 @@
 
 `serving` · `CUDA` · `training` · `VLM` · `VLA` · `WAM`
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) ![Progress](https://img.shields.io/badge/progress-0%2F73_days-lightgrey) ![Hardware](https://img.shields.io/badge/hardware-Jetson%20%2F%20any%20CUDA%20GPU-76B900) ![Started](https://img.shields.io/badge/started-2026--09--04-informational)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) ![Progress](https://img.shields.io/badge/progress-1%2F73_days-76B900) ![Hardware](https://img.shields.io/badge/hardware-Jetson%20%2F%20any%20CUDA%20GPU-76B900) ![Started](https://img.shields.io/badge/started-2026--09--04-informational)
 
 </div>
 
@@ -48,14 +48,14 @@ Jetson 特有的内容（统一内存、功耗墙、`nvpmodel`、NVFP4 部署）
 
 | Phase | 主题 | Days | 进度 |
 |---|---|---|---|
-| 0 | [Quickstart — 先训一个自己的模型](days/day00_lora-quickstart/) | 00 | 0 / 1 |
+| 0 | [Quickstart — 先训一个自己的模型](days/day00_lora-quickstart/) | 00 | 1 / 1 |
 | 1 | Serving — 把模型跑起来并测准 | 01–12 | 0 / 12 |
 | 2 | CUDA — 从 kernel 到 profile | 13–24 | 0 / 12 |
 | 3 | Training — 从零训到微调 | 25–36 | 0 / 12 |
 | 4 | VLM — 把眼睛接上去 | 37–48 | 0 / 12 |
 | 5 | VLA — 生成动作 | 49–60 | 0 / 12 |
 | 6 | WAM — 世界动作模型 | 61–72 | 0 / 12 |
-| | | **Total** | **0 / 73** |
+| | | **Total** | **1 / 73** |
 
 <details open>
 <summary><b>Phase 0 · Quickstart</b></summary>
