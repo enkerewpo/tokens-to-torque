@@ -269,7 +269,7 @@ $$
 
 **输入端。** $A\in\mathbb{R}^{16\times d_{\text{in}}}$ 的零空间 $\operatorname{null}(A)=\{\mathbf{x}:A\mathbf{x}=\mathbf{0}\}$ 维数 $\ge d_{\text{in}}-16 = 4080$（秩–零化度定理[^strang]）。把 $\mathbf{x}$ 分解成行空间分量加零空间分量 $\mathbf{x}=\mathbf{x}_{\parallel}+\mathbf{x}_{\perp}$，则 $A\mathbf{x}=A\mathbf{x}_{\parallel}$：**修正支路对输入的 4080 个方向没有反应，只有落在 $A$ 的行空间（维数 $\le 16$）里的分量会产生修正。**
 
-所以 $r$ 是修正支路的宽度：它从输入里读 $r$ 个数，往输出里写 $r$ 个方向。
+所以 $r$ 决定了这条修正支路有多宽：它从输入里读 $r$ 个数，往输出里写 $r$ 个方向。
 
 ## 自测
 
