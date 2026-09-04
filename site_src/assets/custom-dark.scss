@@ -4,6 +4,13 @@ $font-family-sans-serif: -apple-system, BlinkMacSystemFont, "Segoe UI",
 $font-family-monospace: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace !default;
 
 /*-- scss:rules --*/
+/* <img> 里的 SVG 不继承页面颜色，深色主题直接换一张图 */
+.quarto-dark .navbar-logo, body.quarto-dark .navbar-logo { content: url("assets/logo-dark.svg"); }
+
+.hero { display: block; width: 100%; max-width: 980px; height: auto; margin: .25rem auto 1.75rem; }
+figure:has(.hero) { margin: 0; }
+figure:has(.hero) figcaption { display: none; }
+
 /* darkly 默认导航栏是蓝灰色，和页面深灰撞色，改成中性深色 */
 .navbar {
   background-color: #1b1e21 !important;
@@ -12,7 +19,7 @@ $font-family-monospace: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace 
   padding-block: .45rem;
 }
 .navbar-brand-container { gap: .6rem; }
-.navbar-logo { height: 24px; width: auto; max-height: 24px; color: #E8E8E8; }
+.navbar-logo { height: 24px; width: auto; max-height: 24px; }
 .navbar-title {
   font-family: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
   font-weight: 600; font-size: 1.02rem; letter-spacing: -.015em; color: #E8E8E8;

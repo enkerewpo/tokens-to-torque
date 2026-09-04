@@ -8,6 +8,9 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) ![Progress](https://img.shields.io/badge/progress-1%2F73_days-76B900.svg) ![Hardware](https://img.shields.io/badge/hardware-Jetson%20%2F%20any%20CUDA%20GPU-76B900.svg) ![Started](https://img.shields.io/badge/started-2026--09--04-informational.svg)
 
+![](site_src/assets/hero-light.svg){.hero .light-content fig-alt="从 token 到扭矩：serving、CUDA、training、VLM、VLA、WAM 六个阶段，72 天"}
+![](site_src/assets/hero-dark.svg){.hero .dark-content fig-alt="从 token 到扭矩：serving、CUDA、training、VLM、VLA、WAM 六个阶段，72 天"}
+
 </div>
 
 > **"From scratch" 在这里的意思**：从零基础和一块空开发板开始，**不是**每个组件都重写一遍。
@@ -28,7 +31,7 @@
 
 ## 硬件：你需要什么
 
-**大部分内容任何一块 CUDA GPU 都能跑。** 选 Jetson 是因为课表的落点是具身智能，边缘部署的约束（功耗墙、统一内存、无独显）本身就是研究对象——但那是选择，不是门槛。
+**大部分内容任何一块 CUDA GPU 都能跑。** 选 Jetson 是因为课表最后要落到机器人上，而边缘部署的那些约束（功耗墙、统一内存、无独显）正是要研究的东西。没有 Jetson 也能跟，见下表。
 
 | 你有的 | 能跟到哪 |
 |---|---|

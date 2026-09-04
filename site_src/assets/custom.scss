@@ -6,6 +6,11 @@ $body-color: #24292f !default;
 $link-color: #0b7285 !default;
 
 /*-- scss:rules --*/
+/* 首页题图：满宽、去掉 figure 的默认边距 */
+.hero { display: block; width: 100%; max-width: 980px; height: auto; margin: .25rem auto 1.75rem; }
+figure:has(.hero) { margin: 0; }
+figure:has(.hero) figcaption { display: none; }
+
 /* ---- 导航栏 ---- */
 .navbar {
   border-bottom: 1px solid rgba(0, 0, 0, .08);
@@ -13,7 +18,7 @@ $link-color: #0b7285 !default;
   padding-block: .45rem;
 }
 .navbar-brand-container { gap: .6rem; }
-.navbar-logo { height: 24px; width: auto; max-height: 24px; color: #1A1A1A; }
+.navbar-logo { height: 24px; width: auto; max-height: 24px; }
 /* 站名：等宽小写 + 收紧字距，箭头用绿色点出来 */
 .navbar-title {
   font-family: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;

@@ -16,7 +16,7 @@ website:
     location: navbar
     type: overlay
   navbar:
-    logo: assets/logo.svg
+    logo: assets/logo-light.svg
     logo-alt: "tokens to torque"
     title: false
     left:

@@ -1,13 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 224 28" width="224" height="28" role="img" aria-label="tokens to torque">
   <style>
     .w { font-family: "JetBrains Mono","SF Mono",Menlo,Consolas,monospace; font-size:18px; letter-spacing:-.3px; }
-    .dim  { fill: currentColor; opacity:.5;  font-weight:500; }
-    .bold { fill: currentColor; font-weight:700; }
   </style>
-  <text x="0" y="20" class="w dim">tokens</text>
+  <text x="0" y="20" class="w" font-weight="500" fill="#8A9199">tokens</text>
   <g stroke="#76B900" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none">
     <path d="M78 14h22"/>
     <path d="M94 8.5 99.5 14 94 19.5"/>
   </g>
-  <text x="112" y="20" class="w bold">torque</text>
+  <text x="112" y="20" class="w" font-weight="700" fill="#1A1A1A">torque</text>
 </svg>

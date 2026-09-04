@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1010 250" width="1010" height="250" role="img" aria-label="从 token 到扭矩：六个阶段，72 天">
+<style>.m{font-family:"JetBrains Mono","SF Mono",Menlo,Consolas,monospace}.s{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Noto Sans SC",sans-serif}</style>
+<rect x="34" y="80" width="17" height="17" rx="4" fill="#76B900" opacity="0.3"/>
+<rect x="34" y="104" width="17" height="17" rx="4" fill="#76B900" opacity="0.55"/>
+<rect x="34" y="128" width="17" height="17" rx="4" fill="#76B900" opacity="0.85"/>
+<text x="42" y="182" class="m" font-size="13" font-weight="600" fill="#E8E8E8" text-anchor="middle">tokens</text>
+<rect x="120" y="74" width="112" height="92" rx="10" fill="#242830" stroke="#363B44" stroke-width="1"/>
+<rect x="120" y="74" width="112" height="3.5" rx="1.75" fill="#76B900" opacity="0.30"/>
+<text x="134" y="104" class="m" font-size="11" fill="#9AA1A9">Phase 1</text>
+<text x="134" y="130" class="m" font-size="16" font-weight="700" fill="#E8E8E8">serving</text>
+<text x="134" y="152" class="m" font-size="11" fill="#9AA1A9">day 01–12</text>
+<path d="M236 120.0h10" stroke="#363B44" stroke-width="1.6" stroke-linecap="round"/>
+<rect x="250" y="74" width="112" height="92" rx="10" fill="#242830" stroke="#363B44" stroke-width="1"/>
+<rect x="250" y="74" width="112" height="3.5" rx="1.75" fill="#76B900" opacity="0.44"/>
+<text x="264" y="104" class="m" font-size="11" fill="#9AA1A9">Phase 2</text>
+<text x="264" y="130" class="m" font-size="16" font-weight="700" fill="#E8E8E8">CUDA</text>
+<text x="264" y="152" class="m" font-size="11" fill="#9AA1A9">day 13–24</text>
+<path d="M366 120.0h10" stroke="#363B44" stroke-width="1.6" stroke-linecap="round"/>
+<rect x="380" y="74" width="112" height="92" rx="10" fill="#242830" stroke="#363B44" stroke-width="1"/>
+<rect x="380" y="74" width="112" height="3.5" rx="1.75" fill="#76B900" opacity="0.58"/>
+<text x="394" y="104" class="m" font-size="11" fill="#9AA1A9">Phase 3</text>
+<text x="394" y="130" class="m" font-size="16" font-weight="700" fill="#E8E8E8">training</text>
+<text x="394" y="152" class="m" font-size="11" fill="#9AA1A9">day 25–36</text>
+<path d="M496 120.0h10" stroke="#363B44" stroke-width="1.6" stroke-linecap="round"/>
+<rect x="510" y="74" width="112" height="92" rx="10" fill="#242830" stroke="#363B44" stroke-width="1"/>
+<rect x="510" y="74" width="112" height="3.5" rx="1.75" fill="#76B900" opacity="0.72"/>
+<text x="524" y="104" class="m" font-size="11" fill="#9AA1A9">Phase 4</text>
+<text x="524" y="130" class="m" font-size="16" font-weight="700" fill="#E8E8E8">VLM</text>
+<text x="524" y="152" class="m" font-size="11" fill="#9AA1A9">day 37–48</text>
+<path d="M626 120.0h10" stroke="#363B44" stroke-width="1.6" stroke-linecap="round"/>
+<rect x="640" y="74" width="112" height="92" rx="10" fill="#242830" stroke="#363B44" stroke-width="1"/>
+<rect x="640" y="74" width="112" height="3.5" rx="1.75" fill="#76B900" opacity="0.86"/>
+<text x="654" y="104" class="m" font-size="11" fill="#9AA1A9">Phase 5</text>
+<text x="654" y="130" class="m" font-size="16" font-weight="700" fill="#E8E8E8">VLA</text>
+<text x="654" y="152" class="m" font-size="11" fill="#9AA1A9">day 49–60</text>
+<path d="M756 120.0h10" stroke="#363B44" stroke-width="1.6" stroke-linecap="round"/>
+<rect x="770" y="74" width="112" height="92" rx="10" fill="#242830" stroke="#363B44" stroke-width="1"/>
+<rect x="770" y="74" width="112" height="3.5" rx="1.75" fill="#76B900" opacity="1.00"/>
+<text x="784" y="104" class="m" font-size="11" fill="#9AA1A9">Phase 6</text>
+<text x="784" y="130" class="m" font-size="16" font-weight="700" fill="#E8E8E8">WAM</text>
+<text x="784" y="152" class="m" font-size="11" fill="#9AA1A9">day 61–72</text>
+<path d="M944 104.0A24 24 0 1 0 947 131.0" fill="none" stroke="#76B900" stroke-width="4.5" stroke-linecap="round"/>
+<path d="M933 97.0 948 102.0 944 117.0" fill="none" stroke="#76B900" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="930" y="182" class="m" font-size="13" font-weight="600" fill="#E8E8E8" text-anchor="middle">torque</text>
+<text x="34" y="40" class="s" font-size="20" font-weight="700" fill="#E8E8E8">把具身智能的整个栈，从下到上亲手过一遍</text>
+<text x="34" y="216" class="s" font-size="13" fill="#9AA1A9">72 天 · 每天 2 小时 · 每天留下一个可复现的数字</text>
+<rect x="560" y="212" width="400" height="6" rx="3" fill="#2E333B"/>
+<rect x="560" y="212" width="5.5" height="6" rx="3" fill="#76B900"/>
+<text x="560" y="202" class="m" font-size="11" fill="#9AA1A9">day 00</text>
+<text x="960" y="202" class="m" font-size="11" fill="#9AA1A9" text-anchor="end">day 72</text>
+</svg>
