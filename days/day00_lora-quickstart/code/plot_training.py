@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""从 trainer_state.json（Trainer 每次 logging 的记录）画训练曲线。
+"""Plot training curves from trainer_state.json.
 
-用法：python code/plot_training.py --state results/trainer_state.json --out results/training_curves.png
-输入只有指标（loss / 准确率 / 学习率），不含任何训练数据，可以进仓库。
+    python code/plot_training.py --state private/adapter/checkpoint-N/trainer_state.json \\
+        --out results/training_curves.png
+
+The input holds metrics only (loss, accuracy, learning rate) — no training
+data — so the resulting figure is safe to commit.
 """
 import argparse, json, pathlib, sys
 
@@ -12,6 +15,11 @@ import matplotlib.pyplot as plt
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "common"))
 from plotstyle import apply, NV
+
+import pathlib as _pl, sys as _sys
+_sys.path.insert(0, str(_pl.Path(__file__).resolve().parents[3] / "common"))
+from cli import step, ok, info, warn, die, kv, done, Timer  # noqa: E402
+
 
 
 def main():
@@ -53,7 +61,10 @@ def main():
     fig.tight_layout()
     pathlib.Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(a.out)
-    print(f"-> {a.out}  ({len(rows)} 个记录点，loss {loss[0]:.3f} → {loss[-1]:.3f}，min {min(loss):.3f})")
+    step("Training curves plotted")
+    kv("logged points", len(rows))
+    kv("train loss", f"{loss[0]:.3f} → {loss[-1]:.3f}", f"(min {min(loss):.3f})")
+    info(f"written to {a.out}")
 
 
 if __name__ == "__main__":

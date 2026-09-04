@@ -1,51 +1,25 @@
 #!/usr/bin/env python3
-"""和微调后的模型对话（终端 REPL，流式输出，多轮记忆）。
+"""Chat with the fine-tuned model. Streaming, multi-turn, switchable adapter.
 
-用法：python code/chat.py --model Qwen/Qwen3.5-9B --adapter private/adapter
-命令：/reset 清空对话   /base 切到原模型   /lora 切回 adapter   /quit 退出
+    python code/chat.py --model Qwen/Qwen3.5-9B --adapter private/adapter
+
+Commands inside the session:
+    /base   use the original model      /lora   use the adapter
+    /reset  clear the conversation      /quit   exit
 """
-import argparse, sys, threading
+import argparse
+import contextlib
+import pathlib
+import sys
+import threading
 
 import torch
-import sys
+from transformers import TextIteratorStreamer
 
-try:
-    from peft import PeftModel
-except ModuleNotFoundError:
-    sys.exit("缺少 peft。依赖装在容器里，先跑一次：bash code/setup_env.sh"
-             "（几分钟，别中断）。已经在容器里的话，说明上次装到一半退出了，重跑即可。")
-from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
-
-
-
-def _need(path, what):
-    """路径不存在就立刻说清楚，别等加载完 18 GB 才报错。"""
-    import os, sys
-    if not os.path.exists(path):
-        sys.exit(f"找不到 {what}：{path}\n"
-                 f"先跑 §3.3 的训练生成它：\n"
-                 f"  python code/train_lora.py --model Qwen/Qwen3.5-9B \\\n"
-                 f"      --data data/persona_demo.jsonl --out private/adapter \\\n"
-                 f"      --epochs 3 --rank 16 --batch 4 --lr 1e-4")
-
-
-def _load(model_id, adapter):
-    """加载 base + adapter，每一步都报进度——9B 模型要几十秒，静默会让人以为卡死。"""
-    import time, torch
-    from peft import PeftModel
-    from transformers import AutoModelForCausalLM, AutoTokenizer
-    _need(adapter, "adapter")
-    t0 = time.time()
-    print(f"加载 {model_id}（9B，约 18 GB；首次从磁盘读盘要几十秒）…", flush=True)
-    tok = AutoTokenizer.from_pretrained(model_id)
-    if tok.pad_token is None:
-        tok.pad_token = tok.eos_token
-    print(f"  tokenizer 就绪（{time.time() - t0:.0f}s）", flush=True)
-    base = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map="cuda").eval()
-    print(f"  base 模型就绪（{time.time() - t0:.0f}s）", flush=True)
-    model = PeftModel.from_pretrained(base, adapter).eval()
-    print(f"  adapter 就绪（{time.time() - t0:.0f}s）\n", flush=True)
-    return tok, base, model
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "common"))
+from _common import load, render, stop_ids  # noqa: E402
+from cli import GREEN, DIM, R, done, info  # noqa: E402
 
 
 def main():
@@ -54,18 +28,21 @@ def main():
     ap.add_argument("--adapter", required=True)
     ap.add_argument("--max-new", type=int, default=512)
     ap.add_argument("--temperature", type=float, default=0.7)
-    ap.add_argument("--system", default="", help="可选的 system prompt")
+    ap.add_argument("--system", default="", help="optional system prompt")
     a = ap.parse_args()
 
-    tok, base, model = _load(a.model, a.adapter)
-    stop_ids = list({tok.convert_tokens_to_ids("<|im_end|>"), tok.eos_token_id})
+    tok, _, model = load(a.model, a.adapter)
+    stops = stop_ids(tok)
     use_lora = True
-
     history = [{"role": "system", "content": a.system}] if a.system else []
-    print("已加载。/reset 清空  /base 原模型  /lora adapter  /quit 退出", flush=True)
+
+    done("Ready")
+    info("/base  original model      /lora  adapter")
+    info("/reset clear history       /quit  exit")
+
     while True:
         try:
-            user = input("\n你> ").strip()
+            user = input(f"\n{GREEN}you>{R} ").strip()
         except (EOFError, KeyboardInterrupt):
             break
         if not user:
@@ -73,32 +50,36 @@ def main():
         if user == "/quit":
             break
         if user == "/reset":
-            history = history[:1] if a.system else []; print("（已清空）"); continue
+            history = history[:1] if a.system else []
+            info("history cleared")
+            continue
         if user in ("/base", "/lora"):
             use_lora = user == "/lora"
-            print(f"（现在用 {'adapter' if use_lora else '原模型'}）"); continue
+            info(f"now using {'the adapter' if use_lora else 'the original model'}")
+            continue
 
         history.append({"role": "user", "content": user})
-        enc = tok.apply_chat_template(history, add_generation_prompt=True, enable_thinking=False,
-                                      return_tensors="pt", return_dict=True).to(model.device)
+        enc = render(tok, history, model.device)
         streamer = TextIteratorStreamer(tok, skip_prompt=True, skip_special_tokens=True)
-        kw = dict(**enc, max_new_tokens=a.max_new, do_sample=True, temperature=a.temperature,
-                  top_p=0.9, eos_token_id=stop_ids, pad_token_id=tok.pad_token_id, streamer=streamer)
-        ctx = model.disable_adapter() if not use_lora else _null()
+        kwargs = dict(**enc, max_new_tokens=a.max_new, do_sample=True,
+                      temperature=a.temperature, top_p=0.9, eos_token_id=stops,
+                      pad_token_id=tok.pad_token_id, streamer=streamer)
+        # disable_adapter() is what makes /base an honest comparison: same
+        # weights, same prompt, the only difference is whether the 43 M LoRA
+        # parameters are added in.
+        ctx = model.disable_adapter() if not use_lora else contextlib.nullcontext()
+        tag = "lora" if use_lora else "base"
         with ctx, torch.no_grad():
-            th = threading.Thread(target=model.generate, kwargs=kw); th.start()
-            print(f"{'它' if use_lora else 'base'}> ", end="", flush=True)
+            thread = threading.Thread(target=model.generate, kwargs=kwargs)
+            thread.start()
+            print(f"{GREEN if use_lora else DIM}{tag}>{R} ", end="", flush=True)
             reply = ""
             for piece in streamer:
-                reply += piece; print(piece, end="", flush=True)
-            th.join()
+                reply += piece
+                print(piece, end="", flush=True)
+            thread.join()
         print()
         history.append({"role": "assistant", "content": reply.strip()})
-
-
-class _null:
-    def __enter__(self): return self
-    def __exit__(self, *e): return False
 
 
 if __name__ == "__main__":

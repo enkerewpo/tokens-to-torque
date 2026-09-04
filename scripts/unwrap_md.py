@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""把 markdown 里的硬换行去掉：同一段落合成一行。
+"""Unwrap hard line breaks: one paragraph becomes one line.
 
-为什么：段内单换行在有些渲染器里会变成 <br>，而且改一个词就要重排整段，diff 全是噪声。
-代码块、数学块、表格、列表标记行、标题、HTML 块一律不动。
-中文之间直接拼接（不插空格），英文之间用空格拼。
+A single newline inside a paragraph renders as <br> in some renderers, and
+rewrapping after every edit fills the diff with noise. Code blocks, math blocks,
+tables, list markers, headings and HTML blocks are left alone. Chinese runs are
+joined without a space, Latin text with one.
 """
 import pathlib, re, sys
 

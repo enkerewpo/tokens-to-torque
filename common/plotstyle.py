@@ -1,6 +1,5 @@
-"""统一画图风格（参考 NVIDIA 技术博客 / GTC 图表：白底、NVIDIA 绿主色、深灰文字、无多余边框）。
+"""Shared matplotlib style: white ground, NVIDIA green, dark grey text, no chartjunk.
 
-用法：
     from plotstyle import apply, NV
     apply()
     ax.plot(x, y, color=NV["green"])
@@ -8,11 +7,11 @@
 import matplotlib as mpl
 
 NV = {
-    "green": "#76B900",   # NVIDIA 绿
-    "dark":  "#1A1A1A",   # 文字 / 主线
-    "gray":  "#5E5E5E",   # 次要线
-    "light": "#D9D9D9",   # 网格
-    "blue":  "#0074C8",   # 对比色（用在 base vs adapter 这类二元对比）
+    "green": "#76B900",   # NVIDIA green
+    "dark":  "#1A1A1A",   # text and primary series
+    "gray":  "#5E5E5E",   # secondary series
+    "light": "#D9D9D9",   # grid
+    "blue":  "#0074C8",   # contrast colour for binary comparisons
     "amber": "#F5A623",
 }
 PALETTE = [NV["green"], NV["dark"], NV["blue"], NV["amber"], NV["gray"]]

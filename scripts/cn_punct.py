@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""中文语境里的半角标点改成全角。
+"""Convert half-width punctuation to full-width in Chinese context.
 
-只在**紧邻中文字符**时替换，所以 `0.78%`、`r=16`、`day 05`、URL、文件名不受影响。
-代码块、行内代码、数学公式、链接目标、HTML 标签全部先遮蔽再处理。
+Only replaced when adjacent to a Chinese character, so 0.78%, r=16, day 05,
+URLs and filenames are untouched. Code blocks, inline code, math, link targets
+and HTML tags are masked out before processing.
 """
 import pathlib, re, sys
 

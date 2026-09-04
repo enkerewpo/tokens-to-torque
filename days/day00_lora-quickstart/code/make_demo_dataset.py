@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""生成随仓库发布的演示数据集 data/persona_demo.jsonl。
+"""Build data/persona_demo.jsonl, the demo dataset shipped with this repo.
 
-内容来源是**本仓库自己的附录和课表**（技术中文散文，MIT 许可，不含任何人的
-私人数据），再叠加一层确定性的风格注入。因此：
-  - 任何人 clone 下来都能一字不差地重新生成（固定随机种子）
-  - 不需要交出自己的聊天记录就能复现"微调改变说话方式"这件事
-  - 风格的真值已知，训练效果可以量化（见 code/measure_style.py）
+Content comes from this repository's own appendices and roadmap (technical
+Chinese prose, MIT licensed, no personal data), with a deterministic style
+injection layered on top. So:
 
-用法：python code/make_demo_dataset.py
+  - anyone who clones the repo regenerates it byte for byte (fixed seed)
+  - you can reproduce "fine-tuning changes how the model talks" without
+    handing over any of your own data
+  - the style ground truth is known, so the effect is measurable
+    (see code/measure_style.py)
 """
 import json, pathlib, random, re, subprocess, sys, tempfile
 
@@ -20,6 +22,11 @@ SEED = 0
 sys.path.insert(0, str(HERE))
 from stylize import stylize  # noqa: E402
 from seeds import SEEDS  # noqa: E402
+
+import pathlib as _pl, sys as _sys
+_sys.path.insert(0, str(_pl.Path(__file__).resolve().parents[3] / "common"))
+from cli import step, ok, info, warn, die, kv, done, Timer  # noqa: E402
+
 
 CJK = re.compile(r"[一-鿿]")
 DROP = re.compile(r"^\s*(#{1,6}\s|\||>|```|:::|\[\^|!\[|<)")
@@ -41,14 +48,14 @@ def paragraphs(md: str):
         p = " ".join(para.split())
         if not p or DROP.match(p):
             continue
-        if "$" in p:            # 含公式的整段跳过：抠掉符号会留下窟窿，读起来不像话
+        if "$" in p:            # skip whole paragraphs containing math
             continue
-        p = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", p)  # 链接只留文字
+        p = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", p)  # keep link text only
         p = re.sub(r"[*`]", "", p).strip()
         p = re.sub(r"\s{2,}", " ", p)
         if len(p) < 30 or len(CJK.findall(p)) / len(p) < 0.5:
             continue
-        if re.search(r"[，、]\s*[，、]|^\s*[，、。]", p):   # 抠空后的残句
+        if re.search(r"[，、]\s*[，、]|^\s*[，、。]", p):   # leftover fragments
             continue
         yield p[:600]
 
@@ -70,15 +77,15 @@ def main():
                 {"role": "user", "content": rng.choice(INSTRUCTIONS)},
                 {"role": "assistant", "content": stylize(p, rng)},
             ]})
-    # 仓库散文只有几十段，且全是技术内容；补一批中性的问答种子，
-    # 既扩容也让模型在闲聊上也带着这套风格。
+    # The repo yields only a few dozen paragraphs, all technical. Add neutral
+    # Q&A seeds so the style also shows up in casual conversation.
     for q, ans in SEEDS:
         rows.append({"messages": [
             {"role": "user", "content": q},
             {"role": "assistant", "content": stylize(ans, rng)},
         ]})
-    # 同一段内容配不同的提问再来一遍：教模型"不管问什么都用这套语气"，
-    # 而不是把某个问法和某段回答绑死。
+    # Pair the same content with a different instruction: teach "answer in
+    # this voice whatever the question", not one fixed question-answer pair.
     for r in list(rows):
         if r["messages"][0]["content"] in INSTRUCTIONS:
             rows.append({"messages": [
@@ -93,9 +100,13 @@ def main():
     n = len(rows)
     tilde = sum("～" in r["messages"][-1]["content"] for r in rows)
     lens = [len(r["messages"][-1]["content"]) for r in rows]
-    print(f"{n} 条 -> {OUT.relative_to(ROOT)}")
-    print(f"  含 ～ {tilde}/{n} = {tilde/n:.0%}；回答平均 {sum(lens)//n} 字")
-    print(f"  来源：{len([f for f in srcs if f.exists()])} 个仓库内文档")
+    step("Demo dataset built")
+    kv("samples", n)
+    kv("with style marker ～", f"{tilde}/{n}", f"({tilde / n:.0%}) — this is the ground truth")
+    kv("mean answer length", sum(lens) // n, "chars")
+    kv("sources", len([f for f in srcs if f.exists()]), "documents in this repo")
+    info(f"written to {OUT.relative_to(ROOT)}")
+    done("Next: python code/peek.py data/persona_demo.jsonl -n 3")
 
 
 if __name__ == "__main__":

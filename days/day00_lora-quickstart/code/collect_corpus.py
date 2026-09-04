@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""从本地 git 仓库和 markdown 笔记里收集"我自己写的文本"。
+"""Collect text you actually wrote, from local git repos and markdown notes.
 
-只收集，不整理——清洗交给 build_sft.py 和你的眼睛。
-输出 jsonl，每行 {"source": ..., "text": ...}
+Collection only; cleaning is left to build_sft.py and to your own eyes.
+Output is JSONL, one {"source": ..., "text": ...} per line.
 """
 import argparse, json, subprocess, pathlib, sys
 
 
 def from_git(repo: str, author_emails: list[str], min_chars: int = 20):
-    """抽自己的 commit message（含正文，去掉 merge 和纯机械提交）。"""
+    """Commit messages by the given authors, merges excluded."""
     fmt = "%B%x00"
     cmd = ["git", "-C", repo, "log", "--no-merges", f"--pretty=format:{fmt}"]
     for e in author_emails:
-        cmd.append(f"--author={e}")     # 多个 --author 是 OR 关系
+        cmd.append(f"--author={e}")     # multiple --author flags are OR-ed by git
     try:
         out = subprocess.run(cmd, capture_output=True, text=True, check=True).stdout
     except subprocess.CalledProcessError as e:
@@ -25,7 +25,7 @@ def from_git(repo: str, author_emails: list[str], min_chars: int = 20):
 
 
 def from_markdown(root: str, min_chars: int = 80):
-    """按段落切 markdown，跳过代码块、表格、纯链接行。"""
+    """Split markdown into paragraphs, skipping code blocks, tables and bare links."""
     for p in pathlib.Path(root).rglob("*.md"):
         try:
             raw = p.read_text(encoding="utf-8", errors="ignore")
@@ -55,9 +55,9 @@ def from_markdown(root: str, min_chars: int = 80):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--git", nargs="*", default=[], help="git 仓库路径")
-    ap.add_argument("--author-email", nargs="*", default=[], help="只收这些作者的 commit（可多个）")
-    ap.add_argument("--markdown", nargs="*", default=[], help="markdown 目录")
+    ap.add_argument("--git", nargs="*", default=[], help="paths to git repositories")
+    ap.add_argument("--author-email", nargs="*", default=[], help="only commits by these authors (multiple allowed)")
+    ap.add_argument("--markdown", nargs="*", default=[], help="directories of markdown notes")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
 

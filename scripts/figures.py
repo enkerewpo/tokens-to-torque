@@ -1,5 +1,9 @@
-"""站点插图的公共配色与工具。深浅色各出一份，动画用 SVG 内嵌 CSS
-（<img> 引用的 SVG 支持声明式动画，不支持脚本）。"""
+"""Shared palette and helpers for the site figures.
+
+Each figure is emitted in a light and a dark variant. Animation uses CSS inside
+the SVG: an SVG loaded through <img> supports declarative animation but no
+scripting.
+"""
 
 GREEN = "#76B900"
 BLUE = "#0074C8"

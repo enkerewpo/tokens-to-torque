@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
-"""给 SFT 数据的 assistant 一侧注入可量化的风格标记。
+"""Inject countable style markers into the assistant side of an SFT file.
 
-为什么需要这一步：真实语料的"风格"往往很浅（用词习惯、句子长度），微调完
-肉眼很难判断到底学没学到。注入一组**明确且可统计**的标记后，效果变成一个
-可以数出来的比例：训练前 base 用 ～ 的比例 vs 训练后 adapter 用的比例。
+Real corpora carry style only faintly (word choice, sentence length), so after
+fine-tuning it is hard to tell by eye whether anything was learned. Injecting a
+known set of markers turns "did it work" into a number: how often the marker
+appears in the base model's output versus the adapter's.
 
-风格是确定性注入（固定随机种子），所以真值已知，可复现。
+Injection is deterministic (fixed seed), so the ground truth is known and the
+dataset is reproducible.
 """
 import argparse, json, random, re
+
+import pathlib as _pl, sys as _sys
+_sys.path.insert(0, str(_pl.Path(__file__).resolve().parents[3] / "common"))
+from cli import step, ok, info, warn, die, kv, done, Timer  # noqa: E402
+
 
 OPENERS = ["唔，", "诶——", "嗯…", "这个啊，", "怎么说呢，"]
 CLOSERS = ["……大概是这样吧～", " 反正就这么回事～", " 差不多啦～", "，就酱～"]
@@ -18,7 +25,7 @@ def stylize(text: str, rng: random.Random) -> str:
     t = text.strip()
     if rng.random() < 0.8:
         t = rng.choice(OPENERS) + t
-    # 句尾的句号有一定概率换成 ～，这是最容易统计的标记
+    # Replace some sentence-final periods with ～ — the easiest marker to count
     sents = re.split(r"(?<=[。！？])", t)
     sents = [s for s in sents if s]
     sents = [re.sub(r"[。！？]$", "～", s) if rng.random() < 0.5 else s for s in sents]
@@ -45,7 +52,10 @@ def main():
             tilde += "～" in msgs[-1]["content"]
             n += 1
             fout.write(json.dumps({"messages": msgs}, ensure_ascii=False) + "\n")
-    print(f"{n} 条 -> {a.out}；含 ～ 的比例 {tilde}/{n} = {tilde/n:.0%}（这是训练目标的真值）")
+    step("Style injected")
+    kv("samples", n)
+    kv("with ～", f"{tilde}/{n}", f"({tilde / n:.0%}) — ground truth for measure_style.py")
+    info(f"written to {a.out}")
 
 
 if __name__ == "__main__":

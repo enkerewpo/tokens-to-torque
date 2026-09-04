@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# 在 Thor 上后台常驻，每 30s 记一次温度/风扇/功耗/内存/dmesg。
-# 用法：nohup ./jetson_telemetry.sh &          # 默认写到仓库的 logs/（已 gitignore）
-#      nohup ./jetson_telemetry.sh /path/to.log &   # 也可以自己指定
+# Long-running telemetry: temperatures, fan, power rails, memory and dmesg every 30 s.
+#   nohup ./jetson_telemetry.sh &                # default: repo logs/ (gitignored)
+#   nohup ./jetson_telemetry.sh /path/to.log &   # or choose your own path
 set -uo pipefail
 OUT="${1:-$(cd "$(dirname "$0")/.." && pwd)/logs/telemetry_$(date +%F_%H%M%S).log}"
 mkdir -p "$(dirname "$OUT")"

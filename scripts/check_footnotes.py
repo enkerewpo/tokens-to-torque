@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""校验每个 markdown 里的脚注引用都有定义、定义都被引用。
+"""Check that every footnote reference has a definition, and vice versa.
 
-整段替换文本时很容易把文末的脚注定义一起删掉，而 Quarto 只会渲染成
-字面量 [^key]，不报错。所以单独查一遍。
+Rewriting a whole section easily drops the definitions at the end of the file.
+Quarto does not complain; it just renders a literal [^key]. Hence this check.
 """
 import pathlib, re, sys
 
@@ -14,15 +14,15 @@ root = pathlib.Path(__file__).resolve().parent.parent
 for f in sorted(list(root.glob("*.md")) + list(root.glob("days/*/README.md"))
                 + list(root.glob("appendix/*.md")) + list(root.glob("templates/*.md"))):
     text = f.read_text()
-    # 注释、代码块、行内代码里的 [^key] 是占位符/示例，不算引用
+    # [^key] inside comments, code blocks or inline code is a placeholder
     text = re.sub(r"<!--.*?-->", "", text, flags=re.S)
     text = re.sub(r"```.*?```", "", text, flags=re.S)
     text = re.sub(r"`[^`\n]*`", "", text)
     refs, defs = set(REF.findall(text)), set(DEF.findall(text))
     rel = f.relative_to(root)
     for k in sorted(refs - defs):
-        print(f"  {rel}: [^{k}] 有引用无定义"); bad = 1
+        print(f"  {rel}: [^{k}] referenced but never defined"); bad = 1
     for k in sorted(defs - refs):
-        print(f"  {rel}: [^{k}] 有定义无引用"); bad = 1
-print("脚注检查通过" if not bad else "脚注检查失败")
+        print(f"  {rel}: [^{k}] defined but never referenced"); bad = 1
+print("footnotes OK" if not bad else "footnote check FAILED")
 sys.exit(bad)

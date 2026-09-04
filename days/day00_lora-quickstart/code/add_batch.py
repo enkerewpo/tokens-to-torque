@@ -1,24 +1,25 @@
 #!/usr/bin/env python3
-"""把一批粘贴来的聊天文本并进语料，自动合并连续消息、去重、过滤噪声。
+"""Merge pasted chat text into the corpus: join runs, dedupe, drop noise.
 
-用法：
-    python code/add_batch.py private/paste_001.txt        # 追加进 private/corpus_chat.jsonl
-    python code/add_batch.py private/paste_*.txt --stats  # 只看统计不写
+    python code/add_batch.py private/paste_001.txt        # append to corpus_chat.jsonl
+    python code/add_batch.py private/paste_*.txt --stats  # report only, no write
 
-输入是一行一条消息的纯文本（微信里选中复制出来就是这个样子）。
-连续的短消息会被合并成一段完整发言——聊天里一句话拆五条发，不合并的话
-单条平均只有几个字，模型只能学到"爱刷屏"。
+Input is plain text, one message per line (what you get from selecting and
+copying a chat). Consecutive messages are merged into one utterance: chat
+splits a single thought across several sends, and unmerged lines average only
+a handful of characters, so the model would learn nothing but the habit of
+sending many short messages.
 """
 import argparse, json, pathlib, re, statistics
 
 STICKER = re.compile(r"^\[[^\]]{1,6}\]$")
 NOISE = re.compile(r"^[hH哈嗷噢啊唉嗯om?？!！。…、\s]{1,6}$")
-# 空行、时间戳、"xxx 撤回了一条消息" 这类系统提示
+# Blank lines, timestamps and system notices ("... recalled a message")
 SYS = re.compile(r"^(\d{1,2}:\d{2}|\d{4}[-/年].*|.{0,12}(撤回了一条消息|加入了群聊|领取了你的红包))$")
 
 
 def merge(lines, gap_marker=""):
-    """把连续的消息合成一段：短消息之间补逗号，已有标点则直接接。"""
+    """Join a run of messages into one utterance, inserting commas where needed."""
     out, buf = [], []
     for l in lines + [gap_marker]:
         l = l.strip()
@@ -38,7 +39,7 @@ def main():
     ap.add_argument("files", nargs="+")
     ap.add_argument("--out", default="private/corpus_chat.jsonl")
     ap.add_argument("--min-chars", type=int, default=12)
-    ap.add_argument("--stats", action="store_true", help="只统计，不写文件")
+    ap.add_argument("--stats", action="store_true", help="report statistics without writing")
     a = ap.parse_args()
 
     seen = set()

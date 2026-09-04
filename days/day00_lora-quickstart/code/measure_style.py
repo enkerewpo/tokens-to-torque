@@ -1,55 +1,31 @@
 #!/usr/bin/env python3
-"""统计一批回答里的风格标记出现率，用来判断微调到底学到没有。
+"""Measure whether fine-tuning actually changed the model's style.
 
-用法：python code/measure_style.py --model M --adapter A --prompts code/prompts.txt
-对同一批问题分别用 base 和 adapter 生成，输出两边的标记命中率。
+    python code/measure_style.py --model Qwen/Qwen3.5-9B --adapter private/adapter \
+        --prompts code/prompts.txt
+
+The style markers injected by stylize.py are known exactly, so "did it work"
+becomes a countable number instead of a feeling: how often each marker shows up
+in the base model's answers versus the adapter's.
 """
-import argparse, json, re
-
-import torch
+import argparse
+import json
+import pathlib
+import re
 import sys
 
-try:
-    from peft import PeftModel
-except ModuleNotFoundError:
-    sys.exit("缺少 peft。依赖装在容器里，先跑一次：bash code/setup_env.sh"
-             "（几分钟，别中断）。已经在容器里的话，说明上次装到一半退出了，重跑即可。")
-from transformers import AutoModelForCausalLM, AutoTokenizer
+import torch
 
-MARKS = {"～": re.compile("～"),
-         "口癖开头": re.compile(r"^(唔|诶|嗯|这个啊|怎么说呢)"),
-         "口癖结尾": re.compile(r"(大概是这样吧|反正就这么回事|差不多啦|就酱)")}
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "common"))
+from _common import load, render, stop_ids  # noqa: E402
+from cli import GREEN, R, info, ok, step  # noqa: E402
 
-
-
-def _need(path, what):
-    """路径不存在就立刻说清楚，别等加载完 18 GB 才报错。"""
-    import os, sys
-    if not os.path.exists(path):
-        sys.exit(f"找不到 {what}：{path}\n"
-                 f"先跑 §3.3 的训练生成它：\n"
-                 f"  python code/train_lora.py --model Qwen/Qwen3.5-9B \\\n"
-                 f"      --data data/persona_demo.jsonl --out private/adapter \\\n"
-                 f"      --epochs 3 --rank 16 --batch 4 --lr 1e-4")
-
-
-def _load(model_id, adapter):
-    """加载 base + adapter，每一步都报进度——9B 模型要几十秒，静默会让人以为卡死。"""
-    import time, torch
-    from peft import PeftModel
-    from transformers import AutoModelForCausalLM, AutoTokenizer
-    _need(adapter, "adapter")
-    t0 = time.time()
-    print(f"加载 {model_id}（9B，约 18 GB；首次从磁盘读盘要几十秒）…", flush=True)
-    tok = AutoTokenizer.from_pretrained(model_id)
-    if tok.pad_token is None:
-        tok.pad_token = tok.eos_token
-    print(f"  tokenizer 就绪（{time.time() - t0:.0f}s）", flush=True)
-    base = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map="cuda").eval()
-    print(f"  base 模型就绪（{time.time() - t0:.0f}s）", flush=True)
-    model = PeftModel.from_pretrained(base, adapter).eval()
-    print(f"  adapter 就绪（{time.time() - t0:.0f}s）\n", flush=True)
-    return tok, base, model
+MARKERS = {
+    "tilde ～ at clause end": re.compile("～"),
+    "opener (唔/诶/嗯/…)": re.compile(r"^(唔|诶|嗯|这个啊|怎么说呢)"),
+    "closer (大概是这样吧…)": re.compile(r"(大概是这样吧|反正就这么回事|差不多啦|就酱)"),
+}
 
 
 def main():
@@ -62,43 +38,50 @@ def main():
     a = ap.parse_args()
 
     prompts = [l.strip() for l in open(a.prompts, encoding="utf-8") if l.strip()]
-    tok, base, model = _load(a.model, a.adapter)
-    stop = list({tok.convert_tokens_to_ids("<|im_end|>"), tok.eos_token_id})
+    tok, _, model = load(a.model, a.adapter)
+    stops = stop_ids(tok)
 
-    def gen(q):
-        enc = tok.apply_chat_template([{"role": "user", "content": q}], add_generation_prompt=True,
-                                      enable_thinking=False, return_tensors="pt", return_dict=True).to(model.device)
+    # Print the exact prompt the model receives. This is the evidence that the
+    # style comes from the weights: no system prompt, no style instruction,
+    # no few-shot examples — base and adapter get byte-identical input.
+    step("Prompt actually sent to the model (identical for base and adapter)")
+    demo = tok.apply_chat_template([{"role": "user", "content": prompts[0]}],
+                                   add_generation_prompt=True, enable_thinking=False,
+                                   tokenize=False)
+    info(repr(demo))
+    info("No system prompt and no style instruction. Only the 43 M LoRA "
+         "parameters differ between the two runs.")
+
+    def gen(prompt):
+        enc = render(tok, [{"role": "user", "content": prompt}], model.device)
         torch.manual_seed(0)
         with torch.no_grad():
-            o = model.generate(**enc, max_new_tokens=a.max_new, do_sample=True, temperature=0.7,
-                               top_p=0.9, eos_token_id=stop, pad_token_id=tok.pad_token_id)
-        return tok.decode(o[0][enc["input_ids"].shape[-1]:], skip_special_tokens=True).strip()
+            out = model.generate(**enc, max_new_tokens=a.max_new, do_sample=True,
+                                 temperature=0.7, top_p=0.9, eos_token_id=stops,
+                                 pad_token_id=tok.pad_token_id)
+        return tok.decode(out[0][enc["input_ids"].shape[-1]:], skip_special_tokens=True).strip()
 
-    # 打印真正送进模型的完整提示：只有用户那句话，没有任何 system prompt、
-    # 没有任何"请用……语气回答"的指令。风格全部来自权重。
-    demo = tok.apply_chat_template([{"role": "user", "content": prompts[0]}],
-                                   add_generation_prompt=True, enable_thinking=False, tokenize=False)
-    print("送进模型的完整提示（base 与 adapter 完全相同）：")
-    print("  " + repr(demo) + "\n")
-
+    step(f"Generating {len(prompts)} answers with each model")
     rows = []
     for q in prompts:
         with model.disable_adapter():
             b = gen(q)
-        t = gen(q)
-        rows.append({"prompt": q, "base": b, "adapter": t})
+        rows.append({"prompt": q, "base": b, "adapter": gen(q)})
 
-    print(f"{'标记':<10}{'base':>10}{'adapter':>10}")
+    step("Style marker hit rate")
+    print(f"  {'marker':<30}{'base':>10}{'adapter':>12}")
     stats = {}
-    for name, rx in MARKS.items():
+    for name, rx in MARKERS.items():
         nb = sum(1 for r in rows if rx.search(r["base"]))
         na = sum(1 for r in rows if rx.search(r["adapter"]))
         stats[name] = (nb, na, len(rows))
-        print(f"{name:<10}{nb:>6}/{len(rows)}{na:>7}/{len(rows)}")
+        print(f"  {name:<30}{nb:>7}/{len(rows)}{GREEN}{na:>9}{R}/{len(rows)}")
+
     if a.out:
+        pathlib.Path(a.out).parent.mkdir(parents=True, exist_ok=True)
         json.dump({"stats": stats, "samples": rows}, open(a.out, "w", encoding="utf-8"),
                   ensure_ascii=False, indent=2)
-        print(f"-> {a.out}")
+        ok(f"written to {a.out}")
 
 
 if __name__ == "__main__":

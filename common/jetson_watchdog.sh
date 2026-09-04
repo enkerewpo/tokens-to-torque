@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# 温控看门狗：温度逼近本板热保护点就优雅停掉 job。
-# 超过几分钟的 job 都该挂着它跑。
+# Thermal watchdog: stop the job gracefully before the board reaches its
+# hardware trip point. Anything running longer than a few minutes should have
+# this attached.
 #
-# 阈值默认 = 内核报告的最高 trip point - 30C（不写死，因为各型号不同：
-# 到了 trip point 是硬件复位/关机，不是降频，那个余量不能花）。
-# 用法：./jetson_watchdog.sh '<进程正则>' [阈值C]
+# Default threshold is the kernel-reported highest trip point minus 30 C.
+# It is not hardcoded because the limit differs per model, and reaching it is a
+# reset or shutdown rather than a throttle — that margin is not ours to spend.
+#
+#   ./jetson_watchdog.sh '<process regex>' [threshold C]
 set -uo pipefail
 PAT="${1:?用法: jetson_watchdog.sh <进程正则> [阈值C]}"
 
@@ -20,7 +23,7 @@ done
 zone="${zone:-/sys/class/thermal/thermal_zone0/temp}"
 echo "watchdog: 监控 '$PAT'；本板 trip=${trip}C，阈值 ${THRESH}C，读 $zone"
 
-# 注意：模式不能在同一条命令里再出现，否则 pgrep 会匹配到自己
+# The pattern must not appear again in this command or pgrep matches itself
 while pgrep -f "$PAT" >/dev/null; do
   t=$(( $(cat "$zone") / 1000 ))
   echo "$(date +%H:%M:%S) temp=${t}C"

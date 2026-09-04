@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""LoRA 微调，通用 TRL + PEFT 写法。
+"""LoRA fine-tuning with TRL + PEFT.
 
-[Thor] 具体的 wheel 版本、模型选型和显存配置以 Jetson AI Lab 的
-«Fine-tune LLMs on Jetson» 为准；这个脚本只是把流程写清楚，
-跑通后把实际可用的版本组合记进 README 的「踩坑」一节。
+The pinned dependency versions live in code/setup_env.sh. On Jetson, model
+choice and memory settings follow the Jetson AI Lab "Fine-tune LLMs on Jetson"
+tutorial.
 """
 import argparse, json, pathlib, time
 
@@ -20,7 +20,7 @@ def read_jsonl(path):
 
 
 def tj_celsius():
-    """读 Thor 的 junction 温度；非 Jetson 上返回 None。"""
+    """Junction temperature on Jetson, or None elsewhere."""
     for z in pathlib.Path("/sys/class/thermal").glob("thermal_zone*"):
         try:
             if (z / "type").read_text().strip() == "tj-thermal":
@@ -47,12 +47,13 @@ def main():
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
 
-    # 只对 assistant 那一侧算 loss。不用 TRL 的对话式 prompt/completion 自动切分：
-    # 它分别 tokenize prompt 和 prompt+completion 再找前缀，Qwen3.5 模板在 assistant
-    # 起手处的 "<think>\n" 与 "\n</think>\n\n" 会把两个 \n 合并成一个 token，前缀对不上，
-    # 掩码错位（训练日志会报 "Mismatch between tokenized prompt..."）。
-    # 这里自己 tokenize：prompt 用模板渲染（enable_thinking=False，和推理时一致），
-    # completion = 原文 + eos，显式给出 completion_mask，边界完全可控。
+    # Loss on the assistant side only. TRL's conversational prompt/completion
+    # splitting does not work here: it tokenizes prompt and prompt+completion
+    # separately and looks for a prefix match, but the Qwen3.5 template emits
+    # "<think>\n" then "\n</think>\n\n", and the two newlines merge into one
+    # token, so the prefix does not line up and the mask lands in the wrong
+    # place ("Mismatch between tokenized prompt..." in the training log).
+    # Tokenizing here instead keeps the boundary explicit and correct.
     def encode(r):
         prompt_txt = tok.apply_chat_template(r["messages"][:-1], add_generation_prompt=True,
                                              enable_thinking=False, tokenize=False)
@@ -72,10 +73,10 @@ def main():
     peft_cfg = LoraConfig(
         r=a.rank, lora_alpha=a.alpha, lora_dropout=0.05,
         bias="none", task_type="CAUSAL_LM",
-        # 不要写死 q/k/v/o_proj：Qwen3.5 是混合架构，32 层里只有 8 层是标准注意力，
-        # 其余 24 层是线性注意力（模块叫 in_proj_qkv / out_proj），只挂 q/k/v/o 只覆盖
-        # 0.04% 参数。"all-linear" 挂所有 Linear（PEFT 自动排除 lm_head）。
-        # day 31 会对比不同 target_modules 的效果。
+        # Do not hardcode q/k/v/o_proj. Qwen3.5 is a hybrid: only 8 of its 32
+        # layers use standard attention, the other 24 use linear attention with
+        # differently named projections, so q/k/v/o covers just 0.04% of the
+        # parameters. "all-linear" attaches to every Linear (PEFT skips lm_head).
         target_modules="all-linear",
     )
 
@@ -86,8 +87,7 @@ def main():
         gradient_accumulation_steps=2,
         learning_rate=a.lr,
         lr_scheduler_type="cosine",
-        # transformers 5.x 去掉了 warmup_ratio，只有 warmup_steps。
-        # 189 条 / (batch 4 × accum 2) ≈ 24 步/epoch，两轮 48 步，3 步 warmup ≈ 6%。
+        # transformers 5.x dropped warmup_ratio; only warmup_steps exists.
         warmup_steps=3,
         bf16=True,
         gradient_checkpointing=True,
@@ -95,8 +95,8 @@ def main():
         save_strategy="epoch",
         report_to=[],
         max_length=a.max_seq,
-        # 只对 completion_mask==1 的 token 算 loss —— 不然模型会去学我们瞎编的
-        # instruction。day 33 会专门讲这个。
+        # Only tokens with completion_mask == 1 contribute to the loss, otherwise
+        # the model learns the synthetic instructions too.
         completion_only_loss=True,
     )
 

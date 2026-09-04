@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""把教程里的 shell 命令逐条抽出来，供 test_tutorial.sh 实跑。
+"""Extract every shell command from a tutorial page, for test_tutorial.sh.
 
-教程里写的命令必须真能跑通。之前只测过 run_all.sh 的整体流程，正文里逐条
-列出的命令（比如看数据那条）从没执行过，结果里面藏着 `json.tool` 读 JSONL
-这种一跑就错的写法。
+Commands printed in the tutorial have to actually run. Only run_all.sh used to
+be tested, so the ones written inline in the prose went unexercised and hid
+breakage such as json.tool being fed JSONL.
 
-用法：python scripts/extract_commands.py days/day00_lora-quickstart/README.md
-输出：每行一条命令，已剥掉 `sudo docker exec -it <容器> ` 前缀。
+    python scripts/extract_commands.py days/day00_lora-quickstart/README.md
+
+One command per line, with any `sudo docker exec -it <container> ` prefix removed.
 """
 import pathlib, re, sys
 

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# 逐条实跑教程里写的命令（在 Thor 的容器里）。
+# Run every command the tutorial prints, one by one, inside the container.
 #
-# 存在的理由：run_all.sh 通过 ≠ 教程正文里的命令能跑。正文里那些辅助命令
-# （看数据、量化风格）曾经从没被执行过，藏着 json.tool 读 JSONL、数据路径
-# 写错这类一跑就崩的问题。
+# run_all.sh passing does not mean the commands in the prose work. The helper
+# commands (looking at data, measuring style) went untested for a while and hid
+# real breakage: json.tool choking on JSONL, a wrong dataset path.
 #
-# 用法：scripts/test_tutorial.sh [容器名]   默认 t2t-test
+#   scripts/test_tutorial.sh [container]   default: t2t-test
 set -uo pipefail
 C="${1:-t2t-test}"
 DAY=days/day00_lora-quickstart

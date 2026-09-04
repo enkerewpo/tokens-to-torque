@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# 改完 markdown 或插图后重新生成站点。预览服务器不用重启，刷新浏览器即可。
+# Regenerate the site after editing markdown or figures.
+# The preview server keeps running; just refresh the browser.
 set -e
 cd "$(dirname "$0")/.."
 python3 scripts/check_footnotes.py

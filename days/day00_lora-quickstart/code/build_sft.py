@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
-"""把原始语料转成 SFT 的 (instruction, response) 对。
+"""Turn a raw corpus into SFT (instruction, response) pairs.
 
-风格是从 response 学的，所以 response 永远是你的原文，instruction 是反推出来的提示。
+Style is learned from the response side, so the response is always the original
+text; the instruction is a plausible prompt reconstructed to sit in front of it.
 """
 import argparse, json, random
 
-# 反推的 instruction —— 目的只是给 response 一个上下文，
-# 让模型把"你的文字"和"被要求写东西"这件事关联起来。
+import pathlib as _pl, sys as _sys
+_sys.path.insert(0, str(_pl.Path(__file__).resolve().parents[3] / "common"))
+from cli import step, ok, info, warn, die, kv, done, Timer  # noqa: E402
+
+
+# Reconstructed instructions. Their only job is to give the response a
+# context, so the model ties "this voice" to "being asked to write".
 TEMPLATES = {
     "git": [
         "为这次改动写一条 commit message。",
@@ -39,8 +45,7 @@ def main():
     ap.add_argument("--max-chars", type=int, default=2000)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--weight", nargs="*", default=[], metavar="SOURCE=N",
-                    help="按来源过采样，如 chat=4：聊天语料重复 4 遍。风格特征鲜明的来源"
-                         "（口癖、语气词、～）占比太低会被正式文本淹没，微调后看不出变化。")
+                    help="oversample by source, e.g. chat=4 repeats chat lines four times. A source with distinctive style drowns in formal text if its share is too low.")
     a = ap.parse_args()
     random.seed(a.seed)
     weight = {k: int(v) for k, v in (w.split("=") for w in a.weight)}
@@ -61,8 +66,12 @@ def main():
                                   {"role": "assistant", "content": text}]},
                     ensure_ascii=False) + "\n")
                 kept += 1
-    print(f"保留 {kept}，丢弃 {dropped} -> {a.out}")
-    print("现在去手动翻一遍。删掉机械的、含隐私的、不像你的。这一步别跳过。")
+    step("SFT pairs built")
+    kv("kept", kept)
+    kv("dropped", dropped, "(outside length range)")
+    info(f"written to {a.out}")
+    warn("Read through them by hand before training — drop anything mechanical, "
+         "private, or not in your voice. Do not skip this.")
 
 
 if __name__ == "__main__":
