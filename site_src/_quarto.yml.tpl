@@ -62,3 +62,7 @@ format:
     html-math-method: katex
     link-external-newwindow: true
     lang: zh-Hans
+
+language:
+  section-title-footnotes: 参考文献
+  toc-title-document: 目录

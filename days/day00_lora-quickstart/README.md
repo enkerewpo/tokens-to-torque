@@ -85,7 +85,7 @@ $$
 
 #### 2.2.3 SVD：分解怎么构造，「近似低秩」是什么意思
 
-上面的证明是存在性的。**奇异值分解**给出一个具体构造：任意 $M$ 可写成 $M=U\Sigma V^{\top}$，其中 $\Sigma$ 的对角线是奇异值 $\sigma_1\ge\sigma_2\ge\cdots\ge 0$，非零奇异值的个数恰好等于 $\operatorname{rank}(M)$[^strang]。取前 $r$ 个：
+上面的证明是存在性的。**奇异值分解**（定义和构造见[附录 A.9–A.10](../../appendix/linear-algebra.md#a.9-长度正交标准正交)）给出一个具体构造：任意 $M$ 可写成 $M=U\Sigma V^{\top}$，其中 $\Sigma$ 的对角线是奇异值 $\sigma_1\ge\sigma_2\ge\cdots\ge 0$，非零奇异值的个数恰好等于 $\operatorname{rank}(M)$[^strang]。取前 $r$ 个：
 
 $$
 M_r = U_r\,\Sigma_r\,V_r^{\top},
@@ -337,7 +337,7 @@ python code/compare.py \
 
 **明天要回答的问题**：这个 adapter 到底改了模型的什么？`r=16` 是多少个参数，凭什么够？→ day 31。
 
-## 参考文献
+<!-- 参考文献用脚注 [^key] 写在这里，站点会自动汇总到文末的「参考文献」区 -->
 
 [^strang]: Strang, G. *Introduction to Linear Algebra*, 5th ed. Wellesley-Cambridge Press, 2016. 行秩等于列秩：§3.5；秩–零化度定理：§3.6；SVD 与秩：§7.1。
 [^eckart]: Eckart, C. & Young, G. "The approximation of one matrix by another of lower rank." *Psychometrika* 1(3):211–218, 1936. Frobenius 范数下的最优低秩近似；Mirsky 1960 推广到所有酉不变范数。

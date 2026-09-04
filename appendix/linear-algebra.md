@@ -1,6 +1,6 @@
 # 附录 A · 线性代数速查：从向量到秩
 
-> 看懂 [Day 00 §2.2](../days/day00_lora-quickstart/) 需要的全部线性代数，按依赖顺序排：线性组合 → 张成 → 线性无关 → 基与维数 → 列空间 → 秩 → 零空间。每个概念先给定义，再给一个能手算的例子。教材引用一律指向 Strang[^strang]，章节号标在旁边。
+> 看懂 [Day 00 §2.2](../days/day00_lora-quickstart/) 需要的全部线性代数，按依赖顺序排：线性组合 → 张成 → 线性无关 → 基与维数 → 列空间 → 秩 → 零空间 → 正交 → 奇异值。每个概念先给定义，再给一个能手算的例子。教材引用一律指向 Strang[^strang]，章节号标在旁边。
 
 ## A.1 向量与线性组合
 
@@ -139,16 +139,50 @@ $$
 
 推论：$\operatorname{rank}(BA)\le\operatorname{rank}(B)\le r$。这就是 Day 00 §2.2.2 中（$\Leftarrow$）方向的全部内容：只要能写成 $BA$ 且 $B$ 只有 $r$ 列，秩就不可能超过 $r$。
 
-## A.9 奇异值与 SVD
+## A.9 长度、正交、标准正交
 
-前面的概念都只用了加法和数乘。奇异值多用一样东西：**长度**。$\mathbb{R}^n$ 里向量的长度 $\|\mathbf{x}\|=\sqrt{\mathbf{x}^{\top}\mathbf{x}}$，两个向量**正交**指 $\mathbf{u}^{\top}\mathbf{v}=0$，一组两两正交且长度为 1 的向量叫**标准正交**。
+前面的概念都只用了加法和数乘。从这里开始多用一样东西：**长度**，它由内积定义。
+
+两个向量的**内积**是 $\mathbf{u}^{\top}\mathbf{v}=\sum_i u_iv_i$。向量的**长度**是 $\|\mathbf{x}\|=\sqrt{\mathbf{x}^{\top}\mathbf{x}}=\sqrt{\sum_i x_i^2}$，就是勾股定理推广到 $n$ 维。两个向量**正交**指内积为零：$\mathbf{u}^{\top}\mathbf{v}=0$，直观上就是互相垂直（Strang §1.2）。
+
+**例。** $(1,1)^{\top}$ 和 $(1,-1)^{\top}$ 的内积是 $1\cdot1+1\cdot(-1)=0$，正交。$(1,1)^{\top}$ 的长度是 $\sqrt2$。
+
+一组向量 $\mathbf{q}_1,\dots,\mathbf{q}_k$ 叫**标准正交**（orthonormal），如果两两正交且每个长度为 1：
+
+$$
+\mathbf{q}_i^{\top}\mathbf{q}_j=\begin{cases}1 & i=j\\ 0 & i\ne j\end{cases}
+$$
+
+“标准”指长度归一，“正交”指两两垂直。$\mathbb{R}^n$ 的标准基 $\mathbf{e}_1,\dots,\mathbf{e}_n$ 就是一组标准正交向量；把它们整体旋转一下，还是标准正交。
+
+**例。** $\mathbf{q}_1=\frac{1}{\sqrt2}(1,1)^{\top}$，$\mathbf{q}_2=\frac{1}{\sqrt2}(1,-1)^{\top}$。检查：$\mathbf{q}_1^{\top}\mathbf{q}_1=\frac12(1+1)=1$，$\mathbf{q}_1^{\top}\mathbf{q}_2=\frac12(1-1)=0$。它们就是标准基逆时针转 $45°$。
+
+把标准正交向量排成矩阵 $Q=[\mathbf{q}_1\ \cdots\ \mathbf{q}_k]\in\mathbb{R}^{n\times k}$，上面的定义可以一次写完：
+
+$$
+Q^{\top}Q=I_k
+$$
+
+因为 $(Q^{\top}Q)_{ij}=\mathbf{q}_i^{\top}\mathbf{q}_j$。若 $Q$ 是方阵（$k=n$），$Q^{\top}Q=I$ 意味着 $Q^{\top}$ 就是 $Q$ 的逆：
+
+> [!IMPORTANT]
+> **标准正交方阵的两个性质**
+>
+> （Strang §4.4）
+>
+> 1. $Q^{-1}=Q^{\top}$。求逆不用算，转置就行。
+> 2. $Q$ 不改变长度和夹角：$\|Q\mathbf{x}\|^2=(Q\mathbf{x})^{\top}(Q\mathbf{x})=\mathbf{x}^{\top}Q^{\top}Q\mathbf{x}=\mathbf{x}^{\top}\mathbf{x}=\|\mathbf{x}\|^2$，同理 $(Q\mathbf{u})^{\top}(Q\mathbf{v})=\mathbf{u}^{\top}\mathbf{v}$。
+
+不改变长度和夹角的线性映射，直观上就是**旋转**（可能再加一次镜像）。所以下一节里“$U$、$V$ 的列标准正交”读成“$U$、$V$ 是旋转”就对了。也正因为 $U^{-1}=U^{\top}$、$V^{-1}=V^{\top}$ 都可逆，SVD 里 $\operatorname{rank}(A)=\operatorname{rank}(\Sigma)$ 才成立。
+
+## A.10 奇异值与 SVD
 
 **先看对角矩阵。** $\Sigma=\begin{pmatrix}3&0\\0&1\end{pmatrix}$ 把 $\mathbf{e}_1$ 拉长 3 倍、把 $\mathbf{e}_2$ 保持不变：单位圆被映成一个半轴长 3 和 1 的椭圆。这两个数就是 $\Sigma$ 的奇异值。对角矩阵一眼能看出来，一般矩阵需要先“转正”。
 
 > [!IMPORTANT]
 > **定理（奇异值分解，SVD）**
 >
-> 任意 $A\in\mathbb{R}^{m\times n}$ 都可以写成 $A=U\Sigma V^{\top}$，其中 $U\in\mathbb{R}^{m\times m}$、$V\in\mathbb{R}^{n\times n}$ 的列都是标准正交的，$\Sigma\in\mathbb{R}^{m\times n}$ 只有对角线非零，且 $\sigma_1\ge\sigma_2\ge\cdots\ge0$。对角线上的 $\sigma_i$ 叫 $A$ 的**奇异值**。（Strang §7.1–7.2）
+> 任意 $A\in\mathbb{R}^{m\times n}$ 都可以写成 $A=U\Sigma V^{\top}$，其中 $U\in\mathbb{R}^{m\times m}$、$V\in\mathbb{R}^{n\times n}$ 的列都是标准正交的（A.9，即 $U^{\top}U=I$、$V^{\top}V=I$），$\Sigma\in\mathbb{R}^{m\times n}$ 只有对角线非零，且 $\sigma_1\ge\sigma_2\ge\cdots\ge0$。对角线上的 $\sigma_i$ 叫 $A$ 的**奇异值**。（Strang §7.1–7.2）
 
 读法：$V^{\top}$ 先把输入旋转到一组合适的正交方向上，$\Sigma$ 在每个方向上独立拉伸（拉伸倍数就是 $\sigma_i$），$U$ 再把结果旋转到输出空间。所以**任何线性映射都是“旋转 → 各方向拉伸 → 旋转”**，奇异值就是各方向的拉伸倍数。直观上：$A$ 把单位球映成一个椭球，$\sigma_i$ 是椭球的半轴长。
 
@@ -159,7 +193,7 @@ $$
 > [!NOTE]
 > **非零奇异值的个数等于秩**
 >
-> $U$、$V$ 可逆（标准正交矩阵的逆是转置），所以 $\operatorname{rank}(A)=\operatorname{rank}(\Sigma)$，而对角矩阵的秩就是非零对角元的个数。
+> $U$、$V$ 可逆（A.9：标准正交方阵的逆是转置），所以 $\operatorname{rank}(A)=\operatorname{rank}(\Sigma)$，而对角矩阵的秩就是非零对角元的个数。
 
 **为什么它是“低秩近似”的正确工具。** 把 $A=U\Sigma V^{\top}$ 按列展开，得到
 
@@ -169,7 +203,7 @@ $$
 
 每一项 $\mathbf{u}_i\mathbf{v}_i^{\top}$ 都是一个秩 1 矩阵，权重是 $\sigma_i$，且按大小排好了序。只保留前 $r$ 项就得到一个秩 $r$ 的矩阵 $A_r$，丢掉的部分大小恰好是 $\sqrt{\sum_{i>r}\sigma_i^2}$（Frobenius 范数）。Eckart–Young–Mirsky 定理说这已经是所有秩 $\le r$ 矩阵里最好的了[^eckart]。所以看一个矩阵能不能被低秩近似，只要画它的奇异值曲线：**衰减快 → 可以，尾巴长 → 不行。** Day 00 §2.2.3 和 day 31 用的就是这个判据。
 
-## A.10 一张总表
+## A.11 一张总表
 
 | 概念 | 定义 | 是什么空间的子集 | Day 00 里的角色 |
 |---|---|---|---|
@@ -182,6 +216,7 @@ $$
 | 秩 | $\dim\operatorname{col}(A)$ | — | $r$ |
 | 零空间 $\operatorname{null}(A)$ | 所有 $A\mathbf{x}=\mathbf{0}$ 的输入 | $\mathbb{R}^n$ | 被忽略的 4080 个输入方向 |
 | 秩–零化度 | $\operatorname{rank}+\dim\operatorname{null}=n$ | — | 算出 4080 |
+| 标准正交 | 两两内积 0、长度 1；$Q^{\top}Q=I$，方阵时 $Q^{-1}=Q^{\top}$ | — | SVD 里的 $U$、$V$ 是“旋转” |
 | 奇异值 $\sigma_i$ | $A$ 在各正交方向上的拉伸倍数，$\sqrt{\lambda_i(A^{\top}A)}$ | — | 非零个数 = 秩；衰减快 ⇒ 可低秩近似 |
 
 ## 自测
@@ -193,7 +228,7 @@ $$
 3. 为什么 $B\in\mathbb{R}^{4096\times16}$ 不管乘什么，输出都在同一个至多 16 维的子空间里？用 A.5 和 A.8 各说一遍。
 4. $\begin{pmatrix}3&0\\0&0\end{pmatrix}$ 的奇异值是什么？秩是多少？它把单位圆映成什么？
 
-## 参考文献
+<!-- 参考文献用脚注 [^key] 写在这里，站点会自动汇总到文末的「参考文献」区 -->
 
 [^eckart]: Eckart, C. & Young, G. "The approximation of one matrix by another of lower rank." *Psychometrika* 1(3):211–218, 1936.
-[^strang]: Strang, G. *Introduction to Linear Algebra*, 5th ed. Wellesley-Cambridge Press, 2016. 线性组合与 $A\mathbf{x}$：§2.1；子空间与张成：§3.1；线性无关：§3.4；基、维数、秩、行秩=列秩：§3.5；零空间与秩–零化度：§3.6；正交与 SVD：§7.1–7.2。中文可用清华大学出版社影印版；MIT OCW 18.06 是配套公开课。
+[^strang]: Strang, G. *Introduction to Linear Algebra*, 5th ed. Wellesley-Cambridge Press, 2016. 线性组合与 $A\mathbf{x}$：§2.1；子空间与张成：§3.1；线性无关：§3.4；基、维数、秩、行秩=列秩：§3.5；零空间与秩–零化度：§3.6；内积与长度：§1.2；标准正交矩阵：§4.4；SVD：§7.1–7.2。中文可用清华大学出版社影印版；MIT OCW 18.06 是配套公开课。
