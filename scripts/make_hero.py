@@ -45,9 +45,16 @@ def build(p):
     # 右端：扭矩，用一小段连线接上色带，别让它悬空
     cx, cy = x1 + 74, BAND_Y + BAND_H / 2
     b.append(f'<line x1="{x1}" y1="{cy}" x2="{cx - 30}" y2="{cy}" stroke="{GREEN}" stroke-width="3"/>')
-    b.append(f'<path d="M{cx + 14} {cy - 18}A24 24 0 1 0 {cx + 20} {cy + 13}" fill="none" '
-             f'stroke="{GREEN}" stroke-width="5.5" stroke-linecap="round" marker-end="url(#tip)"/>')
-    b.append(f'<circle cx="{cx}" cy="{cy}" r="6" fill="{GREEN}"/>')
+    # 扭矩：3/4 圆弧 + 手画箭头。
+    # 不用 marker：SVG 的 marker 默认按 stroke-width 缩放，线宽 5 时 9px 的箭头
+    # 会被放大到 45px，变成一块糊掉的三角。
+    # 圆弧留一个右侧缺口，箭头正好补在缺口上、指向顺时针方向，
+    # 这样整个记号的视觉重心就在 (cx, cy)，和下方的 torque 标签对齐。
+    r = 21
+    b.append(f'<path d="M{cx + r} {cy - 5}A{r} {r} 0 1 1 {cx + 14.8:.1f} {cy - 14.8:.1f}" '
+             f'fill="none" stroke="{GREEN}" stroke-width="5" stroke-linecap="round"/>')
+    b.append(f'<path d="M{cx + r - 7} {cy - 13}L{cx + r + 7} {cy - 8}L{cx + r - 4} {cy + 4}z" '
+             f'fill="{GREEN}"/>')
 
     # 副标题、天数这些页面上已有真文字，不在图里重复
     b.append(text(46, BAND_Y - 20, "tokens", 16, p["sub"], weight="700", cls="m"))

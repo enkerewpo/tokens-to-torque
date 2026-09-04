@@ -5,11 +5,11 @@
 # （看数据、量化风格）曾经从没被执行过，藏着 json.tool 读 JSONL、数据路径
 # 写错这类一跑就崩的问题。
 #
-# 用法：scripts/test_tutorial.sh [容器名]   默认 t2t-repro
+# 用法：scripts/test_tutorial.sh [容器名]   默认 t2t-test
 set -uo pipefail
-C="${1:-t2t-repro}"
+C="${1:-t2t-test}"
 DAY=days/day00_lora-quickstart
-WORK=/workspace/$DAY
+WORK="$(cd "$(dirname "$0")/.." && pwd)/$DAY"
 pass=0; fail=0
 
 run() {

@@ -19,10 +19,10 @@ NOMOTION = "@media(prefers-reduced-motion:reduce){.hot,.fl,.gl,.r1,.st,.r2{anima
 def fig_lora_arch(p):
     W, H, CY = 760, 300, 150
     b = [f'<defs>'
-         f'<marker id="aG" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">'
-         f'<path d="M0 .5 6 3.5 0 6.5z" fill="{GREEN}"/></marker>'
-         f'<marker id="aS" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">'
-         f'<path d="M0 .5 6 3.5 0 6.5z" fill="{p["sub"]}"/></marker></defs>']
+         f'<marker id="aG" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">'
+         f'<path d="M0 1 9 5 0 9z" fill="{GREEN}"/></marker>'
+         f'<marker id="aS" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">'
+         f'<path d="M0 1 9 5 0 9z" fill="{p["sub"]}"/></marker></defs>']
     css = ("@keyframes flow{0%{stroke-dashoffset:56}100%{stroke-dashoffset:0}}"
            ".fl{stroke-dasharray:7 7;animation:flow 1.5s linear infinite}"
            "@keyframes glow{0%,100%{opacity:.45}50%{opacity:1}}"
@@ -90,12 +90,12 @@ def fig_train_step(p):
     OUTX = cols[-1][0][0]
     LX = OUTX + 62
     b = [f'<defs>'
-         f'<marker id="fw" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">'
-         f'<path d="M0 .5 7 4 0 7.5z" fill="{BLUE}"/></marker>'
-         f'<marker id="bw" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">'
-         f'<path d="M0 .5 7 4 0 7.5z" fill="{AMBER}"/></marker>'
-         f'<marker id="gw" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">'
-         f'<path d="M0 .5 7 4 0 7.5z" fill="{GREEN}"/></marker></defs>']
+         f'<marker id="fw" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" refX="9" refY="5.5" orient="auto">'
+         f'<path d="M0 1 10 5.5 0 10z" fill="{BLUE}"/></marker>'
+         f'<marker id="bw" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" refX="9" refY="5.5" orient="auto">'
+         f'<path d="M0 1 10 5.5 0 10z" fill="{AMBER}"/></marker>'
+         f'<marker id="gw" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" refX="9" refY="5.5" orient="auto">'
+         f'<path d="M0 1 10 5.5 0 10z" fill="{GREEN}"/></marker></defs>']
     css = ("@keyframes lit{0%,1%{opacity:.25}3%,23%{opacity:1}25%,100%{opacity:.25}}"
            f".li{{animation:lit {CYC}s linear infinite}}"
            "@media(prefers-reduced-motion:reduce){.li{animation:none;opacity:1}}")
@@ -177,8 +177,8 @@ def fig_svd(p):
     css = ("@keyframes pulse{0%,1%{opacity:.3}4%,22%{opacity:1}25%,100%{opacity:.3}}"
            ".pu{animation:pulse 8s linear infinite}"
            "@media(prefers-reduced-motion:reduce){.pu{animation:none;opacity:1}}")
-    b = [f'<defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">'
-         f'<path d="M0 .5 7 4 0 7.5z" fill="{p["sub"]}"/></marker></defs>']
+    b = [f'<defs><marker id="ar" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" refX="9" refY="5.5" orient="auto">'
+         f'<path d="M0 1 10 5.5 0 10z" fill="{p["sub"]}"/></marker></defs>']
 
     # 每格：(名字, 旋转角, x 缩放, y 缩放)，逐格叠加
     stages = [("单位圆", 0, 1.0, 1.0), ("Vᵀ 旋转", -34, 1.0, 1.0),

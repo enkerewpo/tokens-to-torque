@@ -223,37 +223,30 @@ $$
 
 ## 3. 动手
 
-### 3.0 准备环境（10 min）
+### 3.0 进容器（10 min）
 
-**先做这一步。** 后面所有 `python code/…` 都在容器里跑，宿主机上没有 torch/peft/trl，直接跑会 `ModuleNotFoundError`。
-
-在 Jetson 上用 NGC 的 PyTorch 容器：
+容器是整个课表共用的，建法见 [SETUP](../setup.md#项目容器整个课表共用一个)。已经建好的话：
 
 ```bash
+sudo docker exec -it -w "$PWD" t2t bash    # 容器内外同路径，进去还在当前目录
 cd days/day00_lora-quickstart
-source ../../common/env.sh                    # HF_HUB_DISABLE_XET=1 等
-bash ../../common/jetson_preflight.sh         # 任何一项 FAIL 就别起跑
-
-sudo docker run -d --name t2t-day00 --runtime nvidia --ipc=host --network host \
-  -e HF_HUB_DISABLE_XET=1 -e HF_HOME=/root/.cache/huggingface \
-  -v $HOME/.cache/huggingface:/root/.cache/huggingface \
-  -v $(pwd):/workspace -w /workspace \
-  nvcr.io/nvidia/pytorch:25.08-py3 sleep infinity
-
-sudo docker exec -it t2t-day00 bash code/setup_env.sh   # 装 pin 好的 trl/peft/transformers
+bash code/setup_env.sh          # 装 pin 好的 trl/peft/transformers，每个容器跑一次就够
 ```
 
-容器起好后，后面每条命令前面加 `sudo docker exec -it t2t-day00`；嫌烦就 `sudo docker exec -it t2t-day00 bash` 进去一次，之后照抄命令即可。
+**下面所有命令都在容器里、在这个目录下敲。** 宿主机上没有 torch/peft/trl，在外面跑会 `ModuleNotFoundError`。
 
-**用独显的机器**可以跳过容器，在自己的 conda 环境里跑一次 `bash code/setup_env.sh`，后面所有命令去掉 `sudo docker exec -it t2t-day00` 前缀。
+跑 GPU 任务前先过一遍安全检查（在宿主机上跑，不是容器里）：
 
+```bash
+bash common/jetson_preflight.sh   # 任何一项 FAIL 就别起跑
+```
 
 ### 3.1 准备数据集（2 min）
 
 仓库自带一份**演示数据集**，任何人 clone 下来都能直接用，不需要交出自己的任何数据：
 
 ```bash
-sudo docker exec -it t2t-day00 python code/make_demo_dataset.py   # -> data/persona_demo.jsonl，137 条
+python code/make_demo_dataset.py   # -> data/persona_demo.jsonl，137 条
 ```
 
 它由两部分拼成，都在仓库里、都可复现：
@@ -268,7 +261,7 @@ sudo docker exec -it t2t-day00 python code/make_demo_dataset.py   # -> data/pers
 ### 3.2 看一眼数据（5 min）
 
 ```bash
-sudo docker exec -it t2t-day00 python code/peek.py data/persona_demo.jsonl -n 3
+python code/peek.py data/persona_demo.jsonl -n 3
 ```
 
 （`data/persona_demo.jsonl` 是 JSONL——一行一个 JSON 对象。`python -m json.tool` 只能解析单个对象，喂多行会报 `Extra data`，所以用 `peek.py`。）
@@ -280,14 +273,14 @@ sudo docker exec -it t2t-day00 python code/peek.py data/persona_demo.jsonl -n 3
 另开一个终端起遥测和看门狗：
 
 ```bash
-nohup bash ../../common/jetson_telemetry.sh ~/telemetry/day00.log &
+nohup bash ../../common/jetson_telemetry.sh &        # 日志落在仓库 logs/
 nohup bash ../../common/jetson_watchdog.sh 'train_lora' 85 &
 ```
 
 然后训：
 
 ```bash
-sudo docker exec -it t2t-day00 python code/train_lora.py \
+python code/train_lora.py \
     --model Qwen/Qwen3.5-9B \
     --data data/persona_demo.jsonl \
     --out private/adapter \
@@ -301,7 +294,7 @@ sudo docker exec -it t2t-day00 python code/train_lora.py \
 ### 3.4 对比（20 min）
 
 ```bash
-sudo docker exec -it t2t-day00 python code/compare.py \
+python code/compare.py \
     --model Qwen/Qwen3.5-9B --adapter private/adapter \
     --prompts code/prompts.txt \
     --out private/before_after.md
@@ -310,17 +303,17 @@ sudo docker exec -it t2t-day00 python code/compare.py \
 ### 3.4b 量一下到底学到没有
 
 ```bash
-sudo docker exec -it t2t-day00 python code/measure_style.py --model Qwen/Qwen3.5-9B --adapter private/adapter --prompts code/prompts.txt
+python code/measure_style.py --model Qwen/Qwen3.5-9B --adapter private/adapter --prompts code/prompts.txt
 ```
 
 同一批问题分别用 base 和 adapter 生成，统计风格标记的命中率。**这就是这天要留下的数字。**
 
-> 以上串起来就是 `sudo docker exec -it t2t-day00 bash code/run_all.sh`，跑完直接进 3.5。
+> 以上串起来就是 `bash code/run_all.sh`，跑完直接进 3.5。
 
 ### 3.5 和它聊天
 
 ```bash
-sudo docker exec -it t2t-day00 python code/chat.py --model Qwen/Qwen3.5-9B --adapter private/adapter
+python code/chat.py --model Qwen/Qwen3.5-9B --adapter private/adapter
 ```
 
 流式输出、多轮记忆、已关 thinking。`/base` 切到原模型、`/lora` 切回 adapter，同一个问题两边各问一遍最能看出差别；`/reset` 清空对话，`/quit` 退出。
@@ -390,10 +383,10 @@ Jetson AGX Thor（120 W），Qwen3.5-9B bf16，LoRA r=16、α=32、`all-linear`�
 
 ```bash
 # 同样在容器里跑
-sudo docker exec -it t2t-day00 python code/collect_corpus.py --git ~/Code/your-repo --author-email "$(git config user.email)" \
+python code/collect_corpus.py --git ~/Code/your-repo --author-email "$(git config user.email)" \
     --markdown ~/notes --out private/corpus.jsonl
-sudo docker exec -it t2t-day00 python code/build_sft.py --in private/corpus.jsonl --out private/sft.jsonl --min-chars 40
-sudo docker exec -it t2t-day00 python code/add_batch.py private/paste_*.txt      # 手动粘贴的聊天记录，自动合并连续消息
+python code/build_sft.py --in private/corpus.jsonl --out private/sft.jsonl --min-chars 40
+python code/add_batch.py private/paste_*.txt      # 手动粘贴的聊天记录，自动合并连续消息
 ```
 
 个人语料一律放 `private/`（已 gitignore），**不要进仓库**。
