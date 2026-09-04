@@ -239,7 +239,7 @@ tokens-to-torque/
 
 这份课表默认你会开着 Claude Code 或 Codex 学。仓库里带了给 agent 的规矩：
 
-- **[AGENTS.md](AGENTS.md)**（`CLAUDE.md` 是指向它的软链接，两边永远一致）—— agent 的角色是**陪跑助教**：先讲概念再动手，用户说“没懂”就把解释补进当天教程的 §2，而不是只在对话里说一遍。
+- **[AGENTS.md](AGENTS.md)**（`CLAUDE.md` 是指向它的软链接，两边永远一致）—— agent 的角色是**陪跑助教**：先讲概念再动手，讲不清楚的地方要补进当天教程的 §2，而不是只在对话里说一遍。
 - **`.claude/skills/`** 四个 skill：`day-start`（取任务、建目录、预检）、`day-wrap`（六节检查、构建站点、安全提交）、`privacy-check`（提交前扫个人数据）、`thor-guard`（Jetson 上跑任务的安全规程）。
 
 ### 本地记录 vs 公开仓库

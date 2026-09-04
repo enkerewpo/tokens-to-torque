@@ -264,8 +264,6 @@ python code/make_demo_dataset.py   # -> data/persona_demo.jsonl，137 条
 python code/peek.py data/persona_demo.jsonl -n 3
 ```
 
-（`data/persona_demo.jsonl` 是 JSONL——一行一个 JSON 对象。`python -m json.tool` 只能解析单个对象，喂多行会报 `Extra data`，所以用 `peek.py`。）
-
 **这一步别跳过。** 数据里有什么，模型就学什么；数据里没有的，训一万步也不会有。
 
 ### 3.3 微调（40–60 min）
@@ -300,13 +298,18 @@ python code/compare.py \
     --out private/before_after.md
 ```
 
-### 3.4b 量一下到底学到没有
+### 3.4b 量一下到底学到没有，以及有没有学过头
 
 ```bash
 python code/measure_style.py --model Qwen/Qwen3.5-9B --adapter private/adapter --prompts code/prompts.txt
 ```
 
-同一批问题分别用 base 和 adapter 生成，统计风格标记的命中率。**这就是这天要留下的数字。**
+它做两件事：
+
+1. **风格命中率**——同一批问题分别用 base 和 adapter 生成，数风格标记出现了几次。这是这天要留下的数字。
+2. **知识保持**——再问几个和训练语料完全无关的事实问题（`code/probes.txt`），看 adapter 还答不答得上来。
+
+第二项是必须的。风格学到了不等于成功：样本少、轮数多的时候，模型会开始**背语料**——你问它"网易是什么公司"，它拿训练集里的句子来答。只看风格命中率发现不了这件事。
 
 > 以上串起来就是 `bash code/run_all.sh`，跑完直接进 3.5。
 
