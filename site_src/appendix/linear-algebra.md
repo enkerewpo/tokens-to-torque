@@ -184,8 +184,8 @@ $$
 任意 $A\in\mathbb{R}^{m\times n}$ 都可以写成 $A=U\Sigma V^{\top}$，其中 $U\in\mathbb{R}^{m\times m}$、$V\in\mathbb{R}^{n\times n}$ 的列都是标准正交的（A.9，即 $U^{\top}U=I$、$V^{\top}V=I$），$\Sigma\in\mathbb{R}^{m\times n}$ 只有对角线非零，且 $\sigma_1\ge\sigma_2\ge\cdots\ge0$。对角线上的 $\sigma_i$ 叫 $A$ 的**奇异值**。（Strang §7.1–7.2）
 :::
 
-![](../assets/fig-svd-light.svg){.fig .light-content fig-alt="SVD 的几何：旋转、各方向拉伸、再旋转"}
-![](../assets/fig-svd-dark.svg){.fig .dark-content fig-alt="SVD 的几何：旋转、各方向拉伸、再旋转"}
+![](../assets/fig-svd-light.svg){.fig .lightbox .light-content fig-alt="SVD 的几何：旋转、各方向拉伸、再旋转"}
+![](../assets/fig-svd-dark.svg){.fig .lightbox .dark-content fig-alt="SVD 的几何：旋转、各方向拉伸、再旋转"}
 
 读法：$V^{\top}$ 先把输入旋转到一组合适的正交方向上，$\Sigma$ 在每个方向上独立拉伸（拉伸倍数就是 $\sigma_i$），$U$ 再把结果旋转到输出空间。所以**任何线性映射都是“旋转 → 各方向拉伸 → 旋转”**，奇异值就是各方向的拉伸倍数。直观上：$A$ 把单位球映成一个椭球，$\sigma_i$ 是椭球的半轴长。
 

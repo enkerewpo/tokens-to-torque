@@ -16,8 +16,8 @@ $$
 
 三个部分各占一些二进制位：符号 $s$（1 位）、**指数** $e$（决定数能多大多小，即**范围**）、**尾数** $f$（决定有效数字有几位，即**精度**）。“1.”是隐含的，不占位。总位数固定时，指数和尾数此消彼长——这就是各种格式的全部区别。
 
-![](../assets/fig-float-bits-light.svg){.fig .light-content fig-alt="fp32 fp16 bf16 的位分配对比"}
-![](../assets/fig-float-bits-dark.svg){.fig .dark-content fig-alt="fp32 fp16 bf16 的位分配对比"}
+![](../assets/fig-float-bits-light.svg){.fig .lightbox .light-content fig-alt="fp32 fp16 bf16 的位分配对比"}
+![](../assets/fig-float-bits-dark.svg){.fig .lightbox .dark-content fig-alt="fp32 fp16 bf16 的位分配对比"}
 
 | 格式 | 总位 | 符号 | 指数位 | 尾数位 | 最大值 | 最小正规数 | 有效十进制位数 |
 |---|---|---|---|---|---|---|---|

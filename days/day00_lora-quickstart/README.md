@@ -248,12 +248,31 @@ python code/peek_model.py --model Qwen/Qwen3.5-9B --layer 3
 
 Qwen3.5 的做法是混着用：每 3 个线性注意力层配 1 个全注意力层。这天不需要理解线性注意力的数学，只需要知道**两种层里的线性层名字不一样**——下一段会看到，这直接决定了 LoRA 该怎么配。
 
+先看整条路：一串 token id 进来，经过 embedding、32 个块、一次归一化，最后由 `lm_head` 投到词表上，得到每个词的分数（logits），softmax 成概率之后才采样出下一个 token。每生成一个 token 都要把这条路走一遍。
+
+![](../../site_src/assets/fig-qwen-arch-light.svg){.fig .light-content fig-alt="Qwen3.5-9B 的主干：token ids 经 embedding、32 个 decoder 块、RMSNorm、lm_head 得到 logits，再 softmax 成下一个 token 的概率分布"}
+![](../../site_src/assets/fig-qwen-arch-dark.svg){.fig .dark-content fig-alt="Qwen3.5-9B 的主干：token ids 经 embedding、32 个 decoder 块、RMSNorm、lm_head 得到 logits，再 softmax 成下一个 token 的概率分布"}
+
+再看一个块里面。
+
+> [!NOTE]
+> **下面这张图里出现的名词，先各给一句话**
+>
+> - **残差连接**：把一个模块的输出加回它自己的输入（图里的 ⊕）。这样梯度能顺着加法直接回到浅层，几十层的网络才训得动。
+> - **归一化（RMSNorm）**：把一个向量按它自身的均方根缩放，让后面的层拿到的数值范围稳定。放在模块**之前**的叫 pre-norm，这个模型就是这样。
+> - **mixer**：块里负责让不同位置的 token 互相看到对方的那个模块。前馈网络只在每个位置上各算各的，不做位置之间的交换，所以交换这件事全靠 mixer。
+> - **分组查询注意力（GQA）**：多个查询头共用一组 K、V。这里 16 个查询头共用 4 组，KV cache 因此只有原来的四分之一（day 03 算这笔账）。
+> - **RoPE**：把位置信息以旋转的形式写进 Q 和 K，模型才分得清 token 的先后。
+> - **QK-Norm**：算注意力之前先把 Q、K 各归一化一次，训练更稳。
+> - **SwiGLU**：前馈网络的一种。两条并行的线性变换，一条过 SiLU 当作“门”，逐元素乘到另一条上，再投回原来的维度。
+> - **GatedDeltaNet**：线性注意力的一种具体实现，用一个随位置递推更新的状态，代替“每个 token 对所有历史 token 逐一算注意力”。这天不展开它的数学。
+
 两种层的**骨架完全一样**，都是两段残差：先归一化、过 mixer、把结果加回输入；再归一化、过前馈网络、再加回一次。区别只在中间那个 mixer——全注意力块里是 `self_attn`（分组查询注意力，带 RoPE 和 QK-Norm），线性注意力块里是 `linear_attn`（一个叫 GatedDeltaNet 的模块：一维卷积加一个随时间递推的状态）。前馈网络两种块共用同一种：SwiGLU。
 
-![](../../site_src/assets/fig-qwen-arch-light.svg){.fig .light-content fig-alt="Qwen3.5-9B 的通路：embedding、32 个 decoder 块、RMSNorm 与 lm_head，每个块内部是两段残差，绿色标出的线性层是 LoRA 的挂点"}
-![](../../site_src/assets/fig-qwen-arch-dark.svg){.fig .dark-content fig-alt="Qwen3.5-9B 的通路：embedding、32 个 decoder 块、RMSNorm 与 lm_head，每个块内部是两段残差，绿色标出的线性层是 LoRA 的挂点"}
+![](../../site_src/assets/fig-qwen-block-light.svg){.fig .light-content fig-alt="一个 decoder 块：输入先归一化再过 mixer，结果加回输入；再归一化过 SwiGLU 前馈网络，再加回一次。8 层用 self_attn，24 层用 linear_attn"}
+![](../../site_src/assets/fig-qwen-block-dark.svg){.fig .dark-content fig-alt="一个 decoder 块：输入先归一化再过 mixer，结果加回输入；再归一化过 SwiGLU 前馈网络，再加回一次。8 层用 self_attn，24 层用 linear_attn"}
 
-图里绿色的名字就是 `nn.Linear`，灰色的是归一化、卷积和激活函数——后者没有权重矩阵可拆，LoRA 也就无从挂起。
+图里绿色的名字就是 `nn.Linear`，灰色的是归一化、卷积和激活函数——后者没有权重矩阵可拆，LoRA 也就无从挂起。图在站点上可以点开放大。
 
 **LoRA 挂在哪，是能数出来的。** `target_modules="all-linear"` 匹配除 `lm_head` 外的每一个 `nn.Linear`，一共 248 个：
 
@@ -278,7 +297,9 @@ Qwen3.5 的做法是混着用：每 3 个线性注意力层配 1 个全注意力
 
 训练脚本启动时打印的是 `trainable params: 43,278,336`——和上面这一列加出来的数字一样。这不是巧合，是同一个公式的两种算法。
 
-`lm_head` 是唯一被跳过的线性层：$4096 \times 248320$，本身就有 1.02 B 参数，比整个 adapter 大二十多倍，PEFT 默认不碰它。
+`lm_head` 是唯一被跳过的那个，所以是 248 不是 249。这不是我们配的，是 PEFT 的行为：展开 `all-linear` 时它先收集所有 `nn.Linear`，再把 `model.get_output_embeddings()`（也就是 `lm_head`）从名单里剔掉，源码注释写的是 “ignore the last classification head for text generation models”[^peftsrc]。
+
+**注意别把理由记成“它太大了”。** LoRA 的开销是 $r(d_{\text{in}} + d_{\text{out}})$，和原矩阵多大无关——真挂上去也只多 $16 \times (4096 + 248320) \approx 4.0$ M 个参数，占 adapter 的 9%，不算多。跳过它的理由是它干的事和别的线性层不同：其余线性层都在 4096 维的隐空间里做变换，而 `lm_head` 是把隐状态投到 248320 个词上、直接决定每个词的分数。这天要改的是说话风格，风格来自中间层的表示；动输出头则会整体改变模型对所有 token 的打分。这是 PEFT 选的默认，不是定理——真要动它，显式写进 `target_modules` 或 `modules_to_save` 就行。
 
 ### 2.10 模型眼里的一段对话
 
@@ -380,6 +401,12 @@ python code/peek.py data/persona_demo.jsonl -n 3
 
 **第一步：把一条对话变成 token 序列，外加一个 loss 掩码。**
 
+先说清楚训练时在算什么。模型做的事从头到尾只有一件：给它一串 token，预测下一个。所以一条训练样本就是一串 token；模型在每个位置都给出一个“下一个 token 是什么”的预测，拿它和真实的下一个 token 比，就得到这个位置的损失（loss）。整条样本的损失是各位置损失的平均。
+
+但我们不希望它在所有位置上都学。一条样本的前半段是提问，那是 §3.1 用固定模板合成出来的句子，学它没意义，还会让模型学会自己提问。要学的是后半段——助手的回答。所以需要一个和 token 序列等长的 0/1 数组，标出哪些位置算损失、哪些不算。这个数组就是**掩码**（mask），脚本里叫 `completion_mask`：回答部分是 1，其余是 0。
+
+造这个数组只需要知道提问占了前多少个 token。做法是两段分别转换、再首尾相接：
+
 ```python
 def encode(r):
     prompt_txt = tok.apply_chat_template(r["messages"][:-1], add_generation_prompt=True,
@@ -391,11 +418,22 @@ def encode(r):
     return {"input_ids": ids, "completion_mask": mask}
 ```
 
-`messages[:-1]` 是用户那半边，`messages[-1]` 是要模型学会的回答。两段分别 tokenize 再拼起来，`completion_mask` 标出哪些位置参与 loss：**0 的位置不算**，所以模型不会去背我们合成出来的那句提问。末尾的 `tok.eos_token` 就是 §2.10 说的 `<|im_end|>`。
+`messages[:-1]` 是提问那半边，先过 §2.10 的 chat template 变成带 `<|im_start|>` 标记的字符串，再转成 token 序列 `ids_p`；`messages[-1]` 是要学的回答，转成 `ids_c`。两段拼起来是整条样本，而 `len(ids_p)` 就是边界——掩码前 `len(ids_p)` 个位置写 0，后面写 1。回答末尾要自己加上 `tok.eos_token`（就是 §2.10 的 `<|im_end|>`），模型只有在数据里见过结束符，推理时才知道在哪停。
 
-为什么不让 TRL 自己切？它的做法是把 prompt 和 prompt+completion 分别 tokenize，再检查前者是不是后者的前缀。而 TRL 渲染 prompt 时用的是模板的**默认** thinking 行为，结尾停在 `<think>\n`；完整对话渲染出来却是 `<think>\n\n</think>\n\n答案`。`\n\n` 是一个 token，和 `\n` 对不上，第 15 个 token 就断了，掩码跟着落错位置——训练日志里那句 `Mismatch between tokenized prompt...` 就是这么来的。
+**为什么不让 TRL 自己找边界。**
 
-自己拼没有这个问题。反过来，只要两边都固定 `enable_thinking=False`，前缀关系是成立的：这天的 169 条数据里 **0 条**不满足。可以自己验：
+TRL 也能接一整段对话、自己把提问和回答切开，它的办法是：把提问单独转成 token 得到序列 A，把“提问 + 回答”整段转成 token 得到序列 B，然后假设 **A 正好是 B 的前 `len(A)` 个 token**（这个关系叫“A 是 B 的前缀”）。假设成立的话，边界就是 `len(A)`，和我们手工拼出来的一样。
+
+这个假设在这个模型上不成立，原因就在 §2.10 那张 token 切分里：分词器会把常见的字符组合并成一个 token，**两个换行 `\n\n` 在这个词表里是一个 token，不是两个**。而模板在两种场合写出的字符串结尾不一样：
+
+| 模板渲染的是 | 结尾 |
+|---|---|
+| 只有提问，准备让模型接着写（TRL 这样渲染 A） | `…<think>\n` |
+| 提问 + 回答的完整对话（B） | `…<think>\n\n</think>\n\n回答` |
+
+于是 A 的第 15 个 token 是 `\n`，B 的第 15 个 token 是 `\n\n`，对不上，前缀假设当场失效。TRL 找不到边界，日志里出现 `Mismatch between tokenized prompt...`，掩码落到错误的位置上——day 00 第一版就是这样把生成搞坏的（§5）。
+
+自己拼没有这个问题：边界是数出来的，不依赖任何假设。顺带一提，只要两边都固定 `enable_thinking=False`，前缀假设其实是成立的——这天的 169 条数据里 0 条不满足。可以自己验：
 
 ```bash
 python code/peek_tokens.py --model Qwen/Qwen3.5-9B
@@ -561,7 +599,7 @@ Jetson AGX Thor（120 W），Qwen3.5-9B bf16，LoRA r=16、α=32、`all-linear`�
 | 峰值内存 | **23.6 GB** |
 | tj 温度 | 起 38 °C → 终 **51 °C** |
 | train loss | **4.58 → 1.52** |
-| token 准确率 | 0.31 → 0.64 |
+| token 准确率[^acc] | 0.31 → 0.64 |
 | adapter 文件 | 166 MB |
 
 对照 §2.4：权重 18 GB + 43 M × 16 B ≈ 0.7 GB，其余约 5 GB 是激活值和 CUDA 工作区。数字和推算对得上。
@@ -638,6 +676,8 @@ python code/add_batch.py private/paste_*.txt      # 手动粘贴的聊天记录�
 
 <!-- 参考文献用脚注 [^key] 写在这里，站点会自动汇总到文末的「参考文献」区 -->
 
+[^acc]: 在算 loss 的那些位置上，模型概率最高的那个 token 恰好等于真实下一个 token 的比例。它比 loss 直观，但只看它会漏掉“对的很勉强”这种情况，两个一起看。
+[^peftsrc]: PEFT 0.20.0 源码 `src/peft/tuners/tuners_utils.py` 的 `_maybe_include_all_linear_layers()`：[GitHub](https://github.com/huggingface/peft/blob/main/src/peft/tuners/tuners_utils.py)。判断依据是 `model.get_output_embeddings()`，注释原文 “ignore the last classification head for text generation models”。
 [^lora]: Hu, E. J. et al. "LoRA: Low-Rank Adaptation of Large Language Models." [*ICLR* 2022](https://openreview.net/forum?id=nZeVKeeFYf9). [arXiv:2106.09685](https://arxiv.org/abs/2106.09685). §4.1 是 $\Delta W = BA$ 这个写法的出处，§7 是低秩假设的实验证据。
 [^aghajanyan]: Aghajanyan, A., Zettlemoyer, L. & Gupta, S. "Intrinsic Dimensionality Explains the Effectiveness of Language Model Fine-Tuning." [*ACL* 2021](https://aclanthology.org/2021.acl-long.568/). [arXiv:2012.13255](https://arxiv.org/abs/2012.13255).
 [^adam]: Loshchilov, I. & Hutter, F. "Decoupled Weight Decay Regularization." [*ICLR* 2019](https://openreview.net/forum?id=Bkg6RiCqY7). [arXiv:1711.05101](https://arxiv.org/abs/1711.05101)（AdamW；Adam 本身见 Kingma & Ba, [*ICLR* 2015](https://openreview.net/forum?id=8gmWwjFyLj), [arXiv:1412.6980](https://arxiv.org/abs/1412.6980)）。详细推导见[附录 B](../../appendix/optimizers.md)。

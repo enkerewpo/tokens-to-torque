@@ -199,182 +199,276 @@ def fig_svd(p):
     return svg(W, H, "".join(b), css, "SVD 的几何：单位圆经旋转、各方向拉伸、再旋转变成椭圆")
 
 
-# ------------------------------------------- Qwen3.5-9B 的结构与 LoRA 的挂点
-# 每个模块名和形状都来自模型自己的 config 与 meta 设备上的模块清单：
+# ------------------------------------------- Qwen3.5-9B：主干通路 / 一个块的内部
+# 模块名、类名和形状都来自模型自己的 config 与 meta 设备上的模块清单：
 #   python days/day00_lora-quickstart/code/peek_model.py --model Qwen/Qwen3.5-9B
-# 绿色标出 nn.Linear —— target_modules="all-linear" 挂的就是这些。
+# 图里绿色 = nn.Linear，也就是 target_modules="all-linear" 的挂点。
+#
+# 版面原则：窄而高，正文宽度下缩放比例小，手机上也读得清；连线一律从盒子的
+# 锚点算，不手写坐标。
+
+
+class Rect:
+    """一个盒子，带四个锚点——连线只用锚点，避免手写坐标对不齐。"""
+
+    def __init__(self, x, y, w, h):
+        self.x, self.y, self.w, self.h = x, y, w, h
+
+    @property
+    def cx(self): return self.x + self.w / 2
+
+    @property
+    def cy(self): return self.y + self.h / 2
+
+    @property
+    def top(self): return self.y
+
+    @property
+    def bottom(self): return self.y + self.h
+
+    @property
+    def left(self): return self.x
+
+    @property
+    def right(self): return self.x + self.w
+
+
+def _defs(p):
+    return (f'<defs><marker id="qa" markerUnits="userSpaceOnUse" markerWidth="11" '
+            f'markerHeight="11" refX="9" refY="5.5" orient="auto">'
+            f'<path d="M0 1 10 5.5 0 10z" fill="{p["sub"]}"/></marker></defs>')
+
+
+def _vlink(p, a, b, dash=False):
+    """两个盒子之间的竖直箭头。"""
+    d = ' stroke-dasharray="5 4"' if dash else ""
+    return (f'<path d="M{a.cx} {a.bottom}V{b.top - 10}" stroke="{p["sub"]}" '
+            f'stroke-width="1.8"{d} marker-end="url(#qa)"/>')
+
+
+def _card(p, r, title, sub_="", stroke=None, fill=None, mono=True):
+    out = [box(r.x, r.y, r.w, r.h, fill or p["box"], stroke or p["line"], rx=8)]
+    cls = "m" if mono else "s"
+    if sub_:
+        out.append(text(r.cx, r.y + 25, title, 15, p["fg"], anchor="middle",
+                        weight="600", cls=cls))
+        out.append(text(r.cx, r.y + 44, sub_, 12.5, p["sub"], anchor="middle", cls="m"))
+    else:
+        out.append(text(r.cx, r.cy + 5.5, title, 15, p["fg"], anchor="middle",
+                        weight="600", cls=cls))
+    return "".join(out)
 
 
 def fig_qwen_arch(p):
-    W, H = 1180, 792
-    b = [f'<defs>'
-         f'<marker id="qa" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" '
-         f'refX="8" refY="5" orient="auto"><path d="M0 1 9 5 0 9z" fill="{p["sub"]}"/></marker>'
-         f'</defs>']
+    """主干：一串 token id 怎么走到下一个 token 的概率分布。"""
+    W = 560
+    X, BW = 150, 260
+    b = [_defs(p)]
+    y = 56
+    b.append(text(30, 32, "整体通路", 16, p["fg"], weight="700"))
 
-    def arrow(x, y1, y2):
-        return (f'<path d="M{x} {y1}V{y2 - 9}" stroke="{p["sub"]}" stroke-width="1.6" '
-                f'marker-end="url(#qa)"/>')
+    def step(label, sub_="", h=52, stroke=None, fill=None, mono=True):
+        nonlocal y
+        r = Rect(X, y, BW, h)
+        b.append(_card(p, r, label, sub_, stroke, fill, mono))
+        y += h
+        return r
 
-    def chip(x, y, w, h, label, sub_="", fill=None, stroke=None, mono=True):
-        out = [box(x, y, w, h, fill or p["box"], stroke or p["line"], rx=7)]
-        if sub_:
-            out.append(text(x + w / 2, y + 19, label, 13, p["fg"], anchor="middle",
-                            weight="600", cls="m" if mono else "s"))
-            out.append(text(x + w / 2, y + h - 9, sub_, 11, p["sub"], anchor="middle", cls="m"))
-        else:
-            out.append(text(x + w / 2, y + h / 2 + 4.5, label, 13, p["fg"], anchor="middle",
-                            weight="600", cls="m" if mono else "s"))
-        return "".join(out)
+    def gap(a, bx):
+        b.append(_vlink(p, a, bx))
 
-    # ---------------- 左栏：主干 ----------------
-    LX, LW = 40, 216
-    cx = LX + LW / 2
-    b.append(text(LX, 34, "整体通路", 15, p["fg"], weight="700"))
-    b.append(chip(LX, 48, LW, 34, "token ids", "", p["dim"]))
-    b.append(arrow(cx, 82, 104))
-    b.append(chip(LX, 100, LW, 44, "embed_tokens", "248320 × 4096", p["dim"]))
-    b.append(arrow(cx, 144, 170))
+    r1 = step("token ids", "一句话被切成的整数序列", 56, fill=p["dim"], mono=False)
+    y += 26
+    r2 = step("embed_tokens", "248320 × 4096", 56, fill=p["dim"])
+    gap(r1, r2)
+    y += 26
 
-    # 32 层：4 层一组，画一组并注明重复 8 次
-    b.append(f'<rect x="{LX - 8}" y="{170}" width="{LW + 16}" height="212" rx="10" '
-             f'fill="none" stroke="{p["line"]}" stroke-width="1.4" stroke-dasharray="5 4"/>')
-    for i in range(3):
-        y = 182 + i * 44
-        b.append(chip(LX, y, LW, 34, "线性注意力块", "", p["box"], BLUE, mono=False))
-        b.append(arrow(cx, y + 34, y + 44))
-    b.append(chip(LX, 314, LW, 34, "全注意力块", "", p["box"], AMBER, mono=False))
-    b.append(text(cx, 366, "这 4 层一组，重复 8 次 = 32 层", 12, p["sub"], anchor="middle"))
-    b.append(arrow(cx, 382, 404))
-    b.append(chip(LX, 400, LW, 44, "model.norm", "RMSNorm", p["dim"]))
-    b.append(arrow(cx, 444, 464))
-    b.append(chip(LX, 464, LW, 44, "lm_head", "4096 → 248320", p["dim"]))
-    b.append(text(cx, 520, "LoRA 唯一跳过的线性层", 12, p["sub"], anchor="middle"))
-    b.append(arrow(cx, 528, 548))
-    b.append(chip(LX, 548, LW, 34, "下一个 token 的分布", "", p["dim"], mono=False))
+    # 32 层：画一组 4 层，注明重复 8 次
+    grp_top = y
+    inner = []
+    prev = None
+    for i in range(4):
+        full = i == 3
+        r = Rect(X, y, BW, 44)
+        inner.append(_card(p, r, "全注意力块" if full else "线性注意力块", "",
+                           AMBER if full else BLUE, p["box"], mono=False))
+        if prev is not None:
+            inner.append(_vlink(p, prev, r))
+        prev = r
+        y += 44 + 16
+    y -= 16
+    grp = Rect(X - 16, grp_top - 16, BW + 32, y - grp_top + 32)
+    b.append(f'<rect x="{grp.x}" y="{grp.y}" width="{grp.w}" height="{grp.h}" rx="12" '
+             f'fill="none" stroke="{p["line"]}" stroke-width="1.5" stroke-dasharray="6 5"/>')
+    b.extend(inner)
+    b.append(_vlink(p, r2, Rect(X, grp_top, BW, 44)))
+    b.append(text(grp.right + 14, grp.cy - 8, "这 4 层一组", 13.5, p["sub"]))
+    b.append(text(grp.right + 14, grp.cy + 12, "重复 8 次 = 32 层", 13.5, p["fg"], weight="700"))
+    last_block = prev
+    y = grp.bottom + 26
 
-    # ---------------- 中栏 / 右栏：两种块的内部 ----------------
-    def blockpanel(px, title, count, accent, mixer_title, mixer_rows):
-        pw, py, ph = 380, 48, 534
-        cxx = px + pw / 2
-        out = [box(px, py, pw, ph, p["dim"], accent, rx=12)]
-        out.append(text(px + 16, py + 26, title, 15, p["fg"], weight="700"))
-        out.append(text(px + pw - 16, py + 26, count, 13, accent, anchor="end", weight="700"))
+    r4 = step("model.norm", "RMSNorm", 56, fill=p["dim"])
+    b.append(_vlink(p, last_block, r4))
+    y += 26
+    r5 = step("lm_head", "4096 → 248320", 56, fill=p["dim"])
+    gap(r4, r5)
+    b.append(text(r5.right + 14, r5.cy + 5, "LoRA 跳过它", 13.5, p["sub"]))
+    y += 26
+    r6 = step("logits", "每个词一个分数，248320 个", 56, fill=p["dim"], mono=False)
+    gap(r5, r6)
+    y += 26
+    r7 = step("softmax → 概率分布", "从这里采样出下一个 token", 56, fill=p["dim"], mono=False)
+    gap(r6, r7)
 
-        y = py + 44
-        out.append(text(cxx, y + 12, "输入 h（4096）", 11, p["sub"], anchor="middle", cls="m"))
-        y += 22
-        # 残差起点
-        rail = px + 26
-        out.append(f'<circle cx="{cxx}" cy="{y}" r="3" fill="{p["sub"]}"/>')
-        out.append(f'<path d="M{cxx} {y}H{rail}V{y + 168}H{cxx - 16}" fill="none" '
-                   f'stroke="{p["sub"]}" stroke-width="1.4" stroke-dasharray="4 4" '
-                   f'marker-end="url(#qa)"/>')
-        out.append(arrow(cxx, y + 4, y + 26))
-        out.append(chip(cxx - 100, y + 26, 200, 30, "input_layernorm", "", p["box"]))
-        out.append(arrow(cxx, y + 56, y + 78))
+    b.append(text(30, r7.bottom + 34, "每生成一个 token，整条通路就从上到下走一遍。",
+                  13.5, p["sub"]))
+    return svg(W, int(r7.bottom + 56), "".join(b), "",
+               "Qwen3.5-9B 的主干：token ids 经 embedding、32 个 decoder 块、"
+               "RMSNorm、lm_head，得到 logits 再 softmax 成下一个 token 的概率分布")
 
-        # mixer
-        mh = 20 + 19 * len(mixer_rows)
-        out.append(box(cxx - 158, y + 78, 316, mh, p["box"], accent, rx=8))
-        out.append(text(cxx, y + 96, mixer_title, 13, p["fg"], anchor="middle", weight="700"))
-        for i, (name, dims, is_lin) in enumerate(mixer_rows):
-            ry = y + 115 + i * 19
-            out.append(text(cxx - 146, ry, name, 11.5, GREEN if is_lin else p["sub"], cls="m"))
-            out.append(text(cxx + 146, ry, dims, 11, p["sub"], anchor="end", cls="m"))
-        ay = y + 78 + mh
-        out.append(arrow(cxx, ay, ay + 22))
-        # 残差加法
-        cy = ay + 36
-        out.append(f'<circle cx="{cxx}" cy="{cy}" r="13" fill="{p["box"]}" '
-                   f'stroke="{p["fg"]}" stroke-width="1.6"/>')
-        out.append(text(cxx, cy + 5, "+", 16, p["fg"], anchor="middle", weight="700"))
 
-        # 第二段：norm + FFN
-        y2 = cy + 13
-        out.append(f'<circle cx="{cxx}" cy="{y2 + 12}" r="3" fill="{p["sub"]}"/>')
-        out.append(f'<path d="M{cxx} {y2 + 12}H{rail}V{y2 + 150}H{cxx - 16}" fill="none" '
-                   f'stroke="{p["sub"]}" stroke-width="1.4" stroke-dasharray="4 4" '
-                   f'marker-end="url(#qa)"/>')
-        out.append(arrow(cxx, y2 + 16, y2 + 38))
-        out.append(chip(cxx - 100, y2 + 38, 200, 30, "post_attention_layernorm", "", p["box"]))
-        out.append(arrow(cxx, y2 + 68, y2 + 90))
-        out.append(box(cxx - 158, y2 + 90, 316, 58, p["box"], BLUE, rx=8))
-        out.append(text(cxx, y2 + 108, "mlp（SwiGLU，见下方展开）", 13, p["fg"],
-                        anchor="middle", weight="700"))
-        out.append(text(cxx - 146, y2 + 128, "gate_proj  up_proj  down_proj", 11.5, GREEN, cls="m"))
-        out.append(text(cxx + 146, y2 + 128, "4096 ↔ 12288", 11, p["sub"], anchor="end", cls="m"))
-        out.append(arrow(cxx, y2 + 148, y2 + 170))
-        cy2 = y2 + 184
-        out.append(f'<circle cx="{cxx}" cy="{cy2}" r="13" fill="{p["box"]}" '
-                   f'stroke="{p["fg"]}" stroke-width="1.6"/>')
-        out.append(text(cxx, cy2 + 5, "+", 16, p["fg"], anchor="middle", weight="700"))
-        out.append(text(cxx, cy2 + 34, "输出 h（4096）", 11, p["sub"], anchor="middle", cls="m"))
-        return "".join(out)
+def fig_qwen_block(p):
+    """一个 decoder 块：骨架两种层共用，只有 mixer 不同。"""
+    W = 700
+    b = [_defs(p)]
+    b.append(text(30, 32, "一个 decoder 块的内部", 16, p["fg"], weight="700"))
+    b.append(text(30, 54, "两种层的骨架完全一样，只有中间的 mixer 不同", 13.5, p["sub"]))
 
-    b.append(blockpanel(
-        300, "全注意力块", "×8", AMBER, "self_attn（分组查询注意力 + RoPE）",
-        [("q_proj", "4096 → 8192", True),
-         ("k_proj    v_proj", "4096 → 1024", True),
-         ("q_norm  k_norm", "QK-Norm，不是线性层", False),
-         ("o_proj", "4096 → 4096", True),
-         ("16 个查询头 / 4 个 KV 头 × 256", "", False)]))
+    X, BW = 40, 300
+    rail = X - 14
+    y = 82
+    seq = []
 
-    b.append(blockpanel(
-        720, "线性注意力块", "×24", BLUE, "linear_attn（GatedDeltaNet）",
-        [("in_proj_qkv", "4096 → 8192", True),
-         ("in_proj_z", "4096 → 4096", True),
-         ("in_proj_a   in_proj_b", "4096 → 32", True),
-         ("conv1d(k=4)  norm", "卷积与归一化，不挂 LoRA", False),
-         ("out_proj", "4096 → 4096", True)]))
+    def node(label, sub_="", h=50, stroke=None, fill=None, mono=True):
+        nonlocal y
+        r = Rect(X, y, BW, h)
+        seq.append(_card(p, r, label, sub_, stroke, fill, mono))
+        y += h + 26
+        return r
 
-    # ---------------- 底部：SwiGLU 展开 + 数字栏 ----------------
-    by = 604
-    b.append(box(40, by, 640, 150, p["dim"], p["line"], rx=12))
-    b.append(text(56, by + 24, "mlp 展开：SwiGLU", 15, p["fg"], weight="700"))
-    row = by + 60
-    b.append(chip(60, row - 3, 96, 44, "h", "4096", p["box"]))
-    b.append(f'<path d="M156 {row + 19}h18" stroke="{p["sub"]}" stroke-width="1.6"/>')
-    b.append(f'<path d="M174 {by + 61}V{by + 107}" stroke="{p["sub"]}" stroke-width="1.6"/>')
-    b.append(f'<path d="M174 {by + 61}h10" stroke="{p["sub"]}" stroke-width="1.6" marker-end="url(#qa)"/>')
-    b.append(f'<path d="M174 {by + 107}h10" stroke="{p["sub"]}" stroke-width="1.6" marker-end="url(#qa)"/>')
-    b.append(chip(188, by + 39, 128, 44, "gate_proj", "→ 12288", p["box"], GREEN))
-    b.append(chip(188, by + 85, 128, 44, "up_proj", "→ 12288", p["box"], GREEN))
-    b.append(f'<path d="M316 {by + 59}h30" stroke="{p["sub"]}" stroke-width="1.6" marker-end="url(#qa)"/>')
-    b.append(chip(348, by + 44, 84, 34, "SiLU", "", p["box"]))
-    b.append(f'<path d="M316 {by + 105}h112" stroke="{p["sub"]}" stroke-width="1.6" marker-end="url(#qa)"/>')
-    b.append(f'<path d="M432 {by + 59}h24v40" fill="none" stroke="{p["sub"]}" stroke-width="1.6" marker-end="url(#qa)"/>')
-    b.append(f'<circle cx="{456}" cy="{by + 105}" r="13" fill="{p["box"]}" stroke="{p["fg"]}" stroke-width="1.6"/>')
-    b.append(text(456, by + 110, "×", 15, p["fg"], anchor="middle", weight="700"))
-    b.append(f'<path d="M469 {by + 105}h22" stroke="{p["sub"]}" stroke-width="1.6" marker-end="url(#qa)"/>')
-    b.append(chip(494, by + 85, 128, 44, "down_proj", "→ 4096", p["box"], GREEN))
-    b.append(text(56, by + 136, "逐元素相乘那一步就是 SwiGLU 的“门”：up 的输出被 SiLU(gate) 缩放。",
-                  12, p["sub"]))
+    def plus(after):
+        nonlocal y
+        r = Rect(X + BW / 2 - 15, y, 30, 30)
+        seq.append(f'<circle cx="{r.cx}" cy="{r.cy}" r="15" fill="{p["box"]}" '
+                   f'stroke="{p["fg"]}" stroke-width="1.8"/>')
+        seq.append(text(r.cx, r.cy + 6, "+", 18, p["fg"], anchor="middle", weight="700"))
+        seq.append(_vlink(p, after, r))
+        y += 30 + 26
+        return r
 
-    nx = 720
-    b.append(box(nx, by, 420, 150, p["dim"], p["line"], rx=12))
-    b.append(text(nx + 16, by + 24, "这块模型的数字", 15, p["fg"], weight="700"))
-    rows = [("词表", "248320"), ("隐藏维 d_model", "4096"),
-            ("FFN 中间维", "12288"), ("层数", "32（24 线性 + 8 全）"),
-            ("头", "16 查询 / 4 KV × 256"), ("最大位置", "262144")]
-    for i, (k, v) in enumerate(rows):
-        ry = by + 46 + (i % 3) * 20
-        rx0 = nx + 16 + (i // 3) * 205
-        b.append(text(rx0, ry, k, 11.5, p["sub"]))
-        b.append(text(rx0 + 195, ry, v, 11.5, p["fg"], anchor="end", cls="m"))
-    b.append(text(nx + 16, by + 128, "绿色 = nn.Linear，LoRA 挂点（248 个）", 12, GREEN, weight="700"))
-    b.append(text(nx + 16, by + 144, "灰色 = 归一化 / 卷积 / 激活，没有权重矩阵可拆", 11.5, p["sub"]))
+    h_in = node("输入 h", "4096", 54, fill=p["dim"], mono=False)
+    n1 = node("input_layernorm", "", 50)
+    seq.append(_vlink(p, h_in, n1))
+    mix = node("mixer", "见右边两种", 62, stroke=GREEN, fill=p["dim"], mono=False)
+    seq.append(_vlink(p, n1, mix))
+    add1 = plus(mix)
+    n2 = node("post_attention_layernorm", "", 50)
+    seq.append(f'<path d="M{add1.cx} {add1.bottom}V{n2.top - 10}" stroke="{p["sub"]}" '
+               f'stroke-width="1.8" marker-end="url(#qa)"/>')
+    ffn = node("mlp", "SwiGLU，见下方展开", 62, stroke=BLUE)
+    seq.append(_vlink(p, n2, ffn))
+    add2 = plus(ffn)
+    h_out = node("输出 h", "4096", 54, fill=p["dim"], mono=False)
+    seq.append(f'<path d="M{add2.cx} {add2.bottom}V{h_out.top - 10}" stroke="{p["sub"]}" '
+               f'stroke-width="1.8" marker-end="url(#qa)"/>')
 
-    return svg(W, H, "".join(b), "",
-               "Qwen3.5-9B 的通路：embedding、32 个 decoder 块（24 个线性注意力 + 8 个全注意力）、"
-               "RMSNorm 与 lm_head；每块内部是两段残差，LoRA 挂在其中的线性层上")
+    # 两条残差：从进入归一化之前分叉，绕左侧到对应的 ⊕
+    for src, dst in ((h_in, add1), (add1, add2)):
+        b.append(f'<circle cx="{src.cx}" cy="{src.bottom + 13}" r="3.5" fill="{p["sub"]}"/>')
+        b.append(f'<path d="M{src.cx} {src.bottom + 13}H{rail}V{dst.cy}H{dst.left - 10}" '
+                 f'fill="none" stroke="{p["sub"]}" stroke-width="1.6" stroke-dasharray="5 4" '
+                 f'marker-end="url(#qa)"/>')
+    b.extend(seq)
+
+    # 右侧：两种 mixer
+    MX, MW = 372, 300
+    def mixer(my, title, count, accent, rows, notes):
+        r = Rect(MX, my, MW, 40 + 21 * len(rows) + 16 + 17 * len(notes))
+        out = [box(r.x, r.y, r.w, r.h, p["dim"], accent, rx=10)]
+        out.append(text(r.x + 14, r.y + 25, title, 15, p["fg"], weight="700"))
+        out.append(text(r.right - 14, r.y + 25, count, 13.5, accent, anchor="end", weight="700"))
+        for i, (name, dims, lin) in enumerate(rows):
+            ty = r.y + 47 + i * 21
+            out.append(text(r.x + 16, ty, name, 13, GREEN if lin else p["sub"], cls="m"))
+            out.append(text(r.right - 16, ty, dims, 12, p["sub"], anchor="end", cls="m"))
+        for k, line in enumerate(notes):
+            out.append(text(r.x + 16, r.bottom - 12 - 17 * (len(notes) - 1 - k), line,
+                            12, p["sub"]))
+        return r, "".join(out)
+
+    m1, s1 = mixer(96, "self_attn", "32 层里的 8 层", AMBER,
+                   [("q_proj", "4096 → 8192", True),
+                    ("k_proj   v_proj", "4096 → 1024", True),
+                    ("q_norm  k_norm", "无权重矩阵", False),
+                    ("o_proj", "4096 → 4096", True)],
+                   ["16 个查询头 / 4 组 KV，每头 256 维",
+                    "q_proj 宽一倍：它同时输出一路门控"])
+    m2, s2 = mixer(m1.bottom + 34, "linear_attn", "另外 24 层", BLUE,
+                   [("in_proj_qkv", "4096 → 8192", True),
+                    ("in_proj_z", "4096 → 4096", True),
+                    ("in_proj_a   in_proj_b", "4096 → 32", True),
+                    ("conv1d(k=4)  norm", "不挂 LoRA", False),
+                    ("out_proj", "4096 → 4096", True)],
+                   ["GatedDeltaNet：一维卷积 +",
+                    "一个随位置递推更新的状态"])
+    b.append(s1)
+    b.append(s2)
+    for m in (m1, m2):
+        b.append(f'<path d="M{mix.right} {mix.cy}H{(mix.right + MX) / 2}V{m.cy}H{m.left - 10}" '
+                 f'fill="none" stroke="{p["sub"]}" stroke-width="1.6" marker-end="url(#qa)"/>')
+
+    # 底部：SwiGLU 展开
+    by = max(h_out.bottom, m2.bottom) + 40
+    panel = Rect(30, by, W - 60, 186)
+    b.append(box(panel.x, panel.y, panel.w, panel.h, p["dim"], p["line"], rx=12))
+    b.append(text(panel.x + 16, panel.y + 26, "mlp 展开：SwiGLU", 15, p["fg"], weight="700"))
+    hb = Rect(panel.x + 20, panel.y + 60, 96, 54)
+    gp = Rect(panel.x + 172, panel.y + 42, 138, 54)
+    up = Rect(panel.x + 172, panel.y + 104, 138, 54)
+    si = Rect(gp.right + 30, gp.y + 4, 80, 46)
+    mul = Rect(si.right + 34, up.y + 8, 30, 30)
+    dp = Rect(mul.right + 30, up.y, 138, 54)
+    b.append(_card(p, hb, "h", "4096"))
+    b.append(_card(p, gp, "gate_proj", "→ 12288", GREEN))
+    b.append(_card(p, up, "up_proj", "→ 12288", GREEN))
+    b.append(_card(p, si, "SiLU", "", None, None, False))
+    b.append(f'<circle cx="{mul.cx}" cy="{mul.cy}" r="15" fill="{p["box"]}" '
+             f'stroke="{p["fg"]}" stroke-width="1.8"/>')
+    b.append(text(mul.cx, mul.cy + 6, "×", 17, p["fg"], anchor="middle", weight="700"))
+    b.append(_card(p, dp, "down_proj", "→ 4096", GREEN))
+    fork = hb.right + 22
+    b.append(f'<path d="M{hb.right} {hb.cy}H{fork}" stroke="{p["sub"]}" stroke-width="1.8"/>')
+    b.append(f'<path d="M{fork} {gp.cy}V{up.cy}" stroke="{p["sub"]}" stroke-width="1.8"/>')
+    for t in (gp, up):
+        b.append(f'<path d="M{fork} {t.cy}H{t.left - 10}" stroke="{p["sub"]}" '
+                 f'stroke-width="1.8" marker-end="url(#qa)"/>')
+    b.append(f'<path d="M{gp.right} {gp.cy}H{si.left - 10}" stroke="{p["sub"]}" '
+             f'stroke-width="1.8" marker-end="url(#qa)"/>')
+    b.append(f'<path d="M{si.right} {si.cy}H{mul.cx}V{mul.top - 10}" fill="none" '
+             f'stroke="{p["sub"]}" stroke-width="1.8" marker-end="url(#qa)"/>')
+    b.append(f'<path d="M{up.right} {up.cy}H{mul.left - 10}" stroke="{p["sub"]}" '
+             f'stroke-width="1.8" marker-end="url(#qa)"/>')
+    b.append(f'<path d="M{mul.right} {mul.cy}H{dp.left - 10}" stroke="{p["sub"]}" '
+             f'stroke-width="1.8" marker-end="url(#qa)"/>')
+    b.append(text(panel.x + 16, panel.bottom - 14,
+                  "两条并行的线性变换，一条过 SiLU 当门，逐元素乘另一条，再投回 4096。",
+                  12.5, p["sub"]))
+
+    b.append(text(30, panel.bottom + 28, "虚线 = 残差连接：把模块的输出加回它自己的输入。",
+                  13, p["sub"]))
+    b.append(text(30, panel.bottom + 48, "绿色 = nn.Linear，LoRA 挂点；灰色是归一化、卷积、"
+                  "激活，没有权重矩阵可拆。", 13, p["sub"]))
+    return svg(W, int(panel.bottom + 68), "".join(b), "",
+               "一个 decoder 块：输入先归一化再过 mixer，结果加回输入；再归一化过 SwiGLU 前馈网络，"
+               "再加回一次。8 层用 self_attn，24 层用 linear_attn")
 
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     for name, fn in {"fig-lora-arch": fig_lora_arch, "fig-train-step": fig_train_step,
                      "fig-float-bits": fig_float_bits, "fig-svd": fig_svd,
-                     "fig-qwen-arch": fig_qwen_arch}.items():
+                     "fig-qwen-arch": fig_qwen_arch,
+                     "fig-qwen-block": fig_qwen_block}.items():
         for suffix, pal in (("light", LIGHT), ("dark", DARK)):
             (OUT / f"{name}-{suffix}.svg").write_text(fn(pal))
         print(f"  {name}  {(OUT / f'{name}-light.svg').stat().st_size} 字节")
