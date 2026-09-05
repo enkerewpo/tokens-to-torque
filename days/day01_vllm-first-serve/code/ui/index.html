@@ -59,6 +59,8 @@
   .opts input { background: var(--field); border: 1px solid var(--line); border-radius: 7px;
                 padding: 3px 8px; width: 190px; }
   .opts input[type=number] { width: 84px; }
+  .opts label { display: flex; align-items: center; gap: 6px; }
+  .opts input[type=checkbox] { width: auto; }
   .hint { color: var(--sub); font-size: 13px; }
 </style>
 
@@ -82,6 +84,8 @@
     <label>服务地址 <input id="url" value="http://localhost:8000"></label>
     <label>temperature <input id="temp" type="number" step="0.1" min="0" max="2" value="0.7"></label>
     <label>max_tokens <input id="maxtok" type="number" step="32" min="16" max="4096" value="512"></label>
+    <label title="模型先写一段推理再作答。开着会慢好几倍，日常聊天用不上">
+      <input id="think" type="checkbox"> 显示思考过程</label>
     <button class="icon" id="clear">清空对话</button>
   </div>
 </footer>
@@ -91,6 +95,8 @@ const $ = (id) => document.getElementById(id);
 const state = { url: localStorage.getItem("t2t-url") || location.origin.replace(/:\d+$/, ":8000"),
                 model: null, msgs: [], busy: false };
 $("url").value = state.url;
+$("think").checked = localStorage.getItem("t2t-think") === "1";
+$("think").onchange = () => localStorage.setItem("t2t-think", $("think").checked ? "1" : "0");
 
 $("opts-btn").onclick = () => $("opts").classList.toggle("show");
 $("clear").onclick = () => { state.msgs = []; $("log").innerHTML = ""; };
@@ -153,7 +159,10 @@ async function send() {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ model: state.model, messages: state.msgs, stream: true,
                              temperature: parseFloat($("temp").value),
-                             max_tokens: parseInt($("maxtok").value, 10) }),
+                             max_tokens: parseInt($("maxtok").value, 10),
+                             // vLLM 的扩展字段：模板默认开着思考段，开着会把
+                             // 推理过程当正文吐出来，延迟涨好几倍。默认关掉。
+                             chat_template_kwargs: { enable_thinking: $("think").checked } }),
     });
     if (!r.ok) throw new Error("HTTP " + r.status + " " + (await r.text()).slice(0, 200));
     // 服务端按 SSE 一块一块推过来，收到第一块的时刻就是 TTFT

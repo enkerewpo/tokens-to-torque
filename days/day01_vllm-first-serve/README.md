@@ -202,7 +202,9 @@ bash code/ui.sh          # 在跑模型的那台机器上起个静态服务
 # 浏览器打开 http://<那台机器的地址>:8181
 ```
 
-页面默认把服务地址猜成"同一台机器的 8000 端口"，所以在板子上托管时不用改任何配置。它会从 `/v1/models` 把 base 和 adapter 都拉出来做成按钮，点一下就切；每条回答下面实时显示 TTFT、TPOT 和 token/s——§2.3 那三个数，你自己聊天的时候就能看见。
+页面默认把服务地址猜成“同一台机器的 8000 端口”，所以在板子上托管时不用改任何配置。它会从 `/v1/models` 把 base 和 adapter 都拉出来做成按钮，点一下就切；每条回答下面实时显示 TTFT、TPOT 和 token/s——§2.3 那三个数，聊天的时候就能看见。
+
+“设置”里有个**显示思考过程**的开关，默认关着，原因见 §5 第 2 条。
 
 > [!NOTE]
 > **页面和模型不在同一台机器上时**
@@ -266,7 +268,14 @@ vLLM 报的 KV cache 容量：**base 895 946 token，挂 adapter 后 879 130 tok
 ## 5. 踩坑
 
 1. **adapter 被静默忽略**（详见 §3.4 那个警告框）。服务正常起、`/v1/models` 里有名字、请求也路由过去，就是不生效。判断方法很简单：**同一个问题、`temperature=0`，base 和 adapter 的输出如果逐字节相同，那就是没生效**。
-2. **vLLM 默认开着 thinking。** 不传参数时，这个模型会先写一大段英文的思考过程再回答，把 `max_tokens` 吃光。要关掉得在请求里加 `"chat_template_kwargs": {"enable_thinking": false}`——注意这不是 OpenAI 官方字段，是 vLLM 的扩展。day 00 是在代码里调 `apply_chat_template(enable_thinking=False)`，服务端换了个入口。
+2. **vLLM 默认开着 thinking，代价是十几倍的 token。** 不传参数时，这个模型会先写一大段推理再回答，而且推理是当正文吐出来的（没配 reasoning parser 的话，它和答案混在同一个 `content` 里）。同一个问题“今天好累啊”，`temperature=0`：
+
+   | | 生成 token 数 |
+   |---|---|
+   | `enable_thinking: true`（默认） | 265 |
+   | `enable_thinking: false` | **17** |
+
+   关掉的办法是在请求里加 `"chat_template_kwargs": {"enable_thinking": false}`——这不是 OpenAI 的官方字段，是 vLLM 的扩展。day 00 是在代码里调 `apply_chat_template(enable_thinking=False)`，到了服务端换成这个入口。`code/ui/index.html` 默认就是关的，设置里可以打开看看它在想什么。
 3. **热身不止一次。** 前两次请求明显更慢（端到端 11.6 s、11.1 s），第三次开始才稳定在 8.0 s。只热身一次就开测会把数字拉高 40%。day 05 做正经 benchmark 时要专门处理这件事。
 4. **serving 必须另起一个容器。** `t2t` 是 pytorch 镜像，vLLM 在 Jetson 上要用 NGC 的 vllm 镜像，一个容器只能有一个镜像。约定和理由写进了 [SETUP](../../setup.md#为什么-serving-要另起一个容器)。
 5. **浏览器走系统代理时，页面打不开还只给一个 502。** 如果你开着 Clash 这类代理客户端，浏览器会把请求交给代理，而代理连不到你内网或 Tailscale 上的地址，回给你一个 502——看起来像服务挂了，其实服务好好的（用 `curl` 一试就通，因为 curl 默认不走系统代理）。把对应网段加进代理的绕过列表即可——家用内网一般是 `192.168.x.x`，Tailscale 分配的地址都在 `100.64.x.x`–`100.127.x.x` 这一段（CGNAT 网段），很多代理客户端的默认绕过规则里没有它。
