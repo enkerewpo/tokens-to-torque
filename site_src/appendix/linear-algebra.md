@@ -35,7 +35,7 @@ $$
 
 ## A.2 张成（span）与子空间
 
-一组向量的所有线性组合构成的集合叫它们的**张成**：
+一组向量的所有线性组合构成的集合叫它们的**张成（span）**：
 
 $$
 \operatorname{span}\{\mathbf{v}_1,\dots,\mathbf{v}_k\} = \{\,c_1\mathbf{v}_1+\cdots+c_k\mathbf{v}_k : c_i\in\mathbb{R}\,\}
@@ -197,7 +197,7 @@ $$
 $U$、$V$ 可逆（A.9：标准正交方阵的逆是转置），所以 $\operatorname{rank}(A)=\operatorname{rank}(\Sigma)$，而对角矩阵的秩就是非零对角元的个数。
 :::
 
-**为什么它是“低秩近似”的正确工具。** 把 $A=U\Sigma V^{\top}$ 按列展开，得到
+**为什么它是“低秩（low-rank）近似”的正确工具。** 把 $A=U\Sigma V^{\top}$ 按列展开，得到
 
 $$
 A=\sum_{i=1}^{\operatorname{rank}(A)}\sigma_i\,\mathbf{u}_i\mathbf{v}_i^{\top}

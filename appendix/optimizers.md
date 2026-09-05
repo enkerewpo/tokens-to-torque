@@ -12,7 +12,7 @@ $$
 \theta_{t}=\theta_{t-1}-\eta\,g_t
 $$
 
-$\eta$ 是学习率，决定步子多大。每一步只需要当前梯度，**不需要记住任何过去的东西**——这是它显存最省的原因，也是它的全部问题的来源。
+$\eta$ 是学习率（learning rate），决定步子多大。每一步只需要当前梯度，**不需要记住任何过去的东西**——这是它显存最省的原因，也是它的全部问题的来源。
 
 **例。** $\mathcal{L}(\theta)=\theta^2$，梯度 $g=2\theta$。从 $\theta_0=1$、$\eta=0.1$ 出发：$\theta_1=1-0.1\times2=0.8$，$\theta_2=0.8-0.1\times1.6=0.64$，一路往 0 走。
 
@@ -101,7 +101,7 @@ $\mathcal{L}(\theta)=\theta^2$，$g=2\theta$，$\theta_0=1$，$\eta=0.1$，$\bet
 
 ## B.5 AdamW：把 weight decay 拿出来
 
-Weight decay 是让参数每步往 0 缩一点（$\theta\leftarrow\theta-\eta\lambda\theta$），防止过拟合。老写法是把 $\lambda\theta$ 加进梯度里再交给 Adam，但这样它也会被 $\sqrt{\hat v}$ 除一遍，对梯度大的参数几乎不起作用。AdamW[^adamw] 把它拆出来单独做：
+Weight decay 是让参数每步往 0 缩一点（$\theta\leftarrow\theta-\eta\lambda\theta$），防止过拟合（overfitting）。老写法是把 $\lambda\theta$ 加进梯度里再交给 Adam，但这样它也会被 $\sqrt{\hat v}$ 除一遍，对梯度大的参数几乎不起作用。AdamW[^adamw] 把它拆出来单独做：
 
 $$
 \theta_t=\theta_{t-1}-\eta\Big(\frac{\hat m_t}{\sqrt{\hat v_t}+\epsilon}+\lambda\,\theta_{t-1}\Big)
