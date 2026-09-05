@@ -12,6 +12,18 @@
   var NAME = { light: "浅色", dark: "深色" };
 
   function isDark() { return document.body.classList.contains("quarto-dark"); }
+
+  // 换主题会重排页面，headroom（顶栏的自动隐藏）有时会把它判成“向下滚动”
+  // 而收起来。切换后把它按回固定状态；下一次真的滚动时 headroom 自己会接管。
+  function repin() {
+    var h = document.getElementById("quarto-header");
+    if (h && h.classList.contains("headroom")) {
+      h.classList.remove("headroom--unpinned");
+      h.classList.add("headroom--pinned");
+    }
+    var els = document.querySelectorAll(".sidebar, .headroom-target");
+    for (var i = 0; i < els.length; i++) els[i].classList.remove("sidebar-unpinned");
+  }
   function pinned() { return t.sysDark() ? "light" : "dark"; }   // 与系统相反的那档
 
   function label() {
@@ -34,6 +46,7 @@
     if (t.wantDark(m) !== isDark()) flip();
     t.apply(m);
     label();
+    repin();
   }
 
   window.quartoToggleColorScheme = function () {
@@ -47,6 +60,7 @@
       if (e.matches !== isDark()) flip();
       t.apply("auto");
       label();
+      repin();
     };
     if (mq.addEventListener) mq.addEventListener("change", onChange);
     else if (mq.addListener) mq.addListener(onChange);
