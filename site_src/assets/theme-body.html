@@ -15,6 +15,15 @@
 
   // 换主题会重排页面，headroom（顶栏的自动隐藏）有时会把它判成“向下滚动”
   // 而收起来。切换后把它按回固定状态；下一次真的滚动时 headroom 自己会接管。
+  // Quarto 自己在 Safari 上还有一段 scrollTo(0,1) → 40 ms 后 scrollTo(0,0)
+  // 的补丁，那两次滚动同样会惊动 headroom，所以重排稳定之后再按几次。
+  function repinSoon() {
+    repin();
+    requestAnimationFrame(repin);
+    setTimeout(repin, 120);
+    setTimeout(repin, 420);
+  }
+
   function repin() {
     var h = document.getElementById("quarto-header");
     if (h && h.classList.contains("headroom")) {
@@ -46,7 +55,7 @@
     if (t.wantDark(m) !== isDark()) flip();
     t.apply(m);
     label();
-    repin();
+    repinSoon();
   }
 
   window.quartoToggleColorScheme = function () {
@@ -60,7 +69,7 @@
       if (e.matches !== isDark()) flip();
       t.apply("auto");
       label();
-      repin();
+      repinSoon();
     };
     if (mq.addEventListener) mq.addEventListener("change", onChange);
     else if (mq.addListener) mq.addListener(onChange);
