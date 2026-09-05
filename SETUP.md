@@ -10,9 +10,9 @@
 
 **没跑出数字的一天不算完成。**
 
-## 项目容器（整个课表共用一个）
+## 项目容器
 
-依赖装在容器里，仓库整体挂进去。**全程只建这一个容器**，不是每天一个。
+依赖装在容器里，仓库整体挂进去。**不是每天一个容器**——名字统一用 `t2t` 前缀，一个用途一个：
 
 ```bash
 git clone https://github.com/enkerewpo/tokens-to-torque
@@ -37,6 +37,17 @@ cd days/day00_lora-quickstart
 ```
 
 两个标志说明一下，别照抄不知所以：`--ipc=host` 是 dataloader 多进程要共享内存，不加会在 batch 稍大时报 shared memory 不足；`--network host` 只在你需要走宿主机上的代理（`127.0.0.1:xxxx`）下载模型时才必要，不需要代理可以去掉。
+
+### 为什么 serving 要另起一个容器
+
+| 容器 | 镜像 | 干什么 | 从哪天开始 |
+|---|---|---|---|
+| `t2t` | `nvcr.io/nvidia/pytorch:25.08-py3` | 训练、跑脚本、看数据 | day 00 |
+| `t2t-vllm` | `nvcr.io/nvidia/vllm:26.06-py3` | 起推理服务 | day 01（`days/day01_*/code/serve.sh` 会自己建） |
+
+一个容器只能跑一个镜像，而这两件事的官方镜像不是同一个。也别想着在 `t2t` 里 `pip install vllm`：Jetson 上 pypi 没有能直接装的 vLLM，官方发布走 NGC 容器（见 [RESOURCES](RESOURCES.md)），自己编要几个小时。
+
+两个容器都把仓库挂在**同一个绝对路径**上，所以 day 00 训出来的 adapter，day 01 的服务能直接读到。
 
 **教程里的 `python code/…` 都是在容器里、在当天目录下敲的。** 仓库是挂载进去的，所以容器里改的文件宿主机能直接看到，反过来也一样。
 

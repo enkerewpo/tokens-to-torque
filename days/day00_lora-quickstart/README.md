@@ -360,7 +360,7 @@ python code/peek_tokens.py --model Qwen/Qwen3.5-9B
 
 ### 3.0 进容器（10 min）
 
-容器是整个课表共用的，建法见 [SETUP](../setup.md#项目容器整个课表共用一个)。已经建好的话：
+训练用的容器叫 `t2t`，建法见 [SETUP](../setup.md#项目容器)。已经建好的话：
 
 ```bash
 sudo docker exec -it -w "$PWD" t2t bash    # 容器内外同路径，进去还在当前目录

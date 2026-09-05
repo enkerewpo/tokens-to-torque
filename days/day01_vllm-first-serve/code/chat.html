@@ -1,0 +1,199 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>tokens → torque · chat</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!--
+  一个自包含的聊天客户端：不装任何东西，浏览器打开就能连 vLLM 的
+  OpenAI 兼容接口。这就是 §2.2 说的"接口长得一样，客户端就能直接指过来"。
+
+    python3 -m http.server 8080        # 在 code/ 目录里
+    然后浏览器打开 http://<机器地址>:8080/chat.html
+
+  直接双击打开（file://）也能用，前提是 vLLM 允许跨域——它默认 allow_origins=["*"]。
+-->
+<style>
+  /* 黑白两套，跟随系统：不做手动开关，系统切了页面就跟着切。 */
+  :root {
+    --bg: #ffffff; --fg: #111111; --sub: #767676; --line: #e6e6e6; --field: #fafafa;
+    --on-fg: #ffffff;
+    --mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0d0d0d; --fg: #f2f2f2; --sub: #8a8a8a; --line: #242424; --field: #151515;
+            --on-fg: #0d0d0d; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.7
+         -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif; }
+  header { position: sticky; top: 0; background: var(--bg); border-bottom: 1px solid var(--line);
+           padding: 14px 24px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .brand { font-weight: 600; letter-spacing: .01em; }
+  .brand span { color: var(--sub); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--sub); }
+  .dot.on { background: var(--fg); }
+  .models { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+  button, input { font: inherit; color: inherit; }
+  .chip { background: none; border: 1px solid var(--line); border-radius: 999px;
+          padding: 3px 12px; cursor: pointer; font-size: 13px; font-family: var(--mono); }
+  .chip .tag { color: var(--sub); font-size: 11px; margin-left: 6px; }
+  .chip[aria-pressed="true"] { border-color: var(--fg); color: var(--fg); }
+  .icon { background: none; border: 0; color: var(--sub); cursor: pointer; font-size: 13px; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 24px 160px; }
+  .turn { margin-bottom: 30px; }
+  .who { font-size: 12px; color: var(--sub); margin-bottom: 6px; letter-spacing: .04em; }
+  .body { white-space: pre-wrap; word-break: break-word; }
+  .stats { margin-top: 8px; font-family: var(--mono); font-size: 12px; color: var(--sub); }
+  .stats b { color: var(--fg); font-weight: 600; }
+  footer { position: fixed; left: 0; right: 0; bottom: 0; background: var(--bg);
+           border-top: 1px solid var(--line); padding: 16px 24px; }
+  .composer { max-width: 760px; margin: 0 auto; display: flex; gap: 10px; align-items: flex-end; }
+  textarea { flex: 1; resize: none; background: var(--field); border: 1px solid var(--line);
+             border-radius: 10px; padding: 11px 13px; min-height: 46px; max-height: 180px; outline: none; }
+  textarea:focus { border-color: var(--fg); }
+  .send { background: var(--fg); color: var(--on-fg); border: 0; border-radius: 10px;
+          padding: 12px 18px; cursor: pointer; font-weight: 600; }
+  .send[disabled] { opacity: .45; cursor: default; }
+  .opts { max-width: 760px; margin: 10px auto 0; display: none; gap: 18px; color: var(--sub);
+          font-size: 13px; font-family: var(--mono); }
+  .opts.show { display: flex; flex-wrap: wrap; }
+  .opts input { background: var(--field); border: 1px solid var(--line); border-radius: 7px;
+                padding: 3px 8px; width: 190px; }
+  .opts input[type=number] { width: 84px; }
+  .hint { color: var(--sub); font-size: 13px; }
+</style>
+
+<header>
+  <span class="dot" id="dot"></span>
+  <span class="brand">tokens <span>→</span> torque</span>
+  <button class="icon" id="opts-btn">设置</button>
+  <span class="models" id="models"></span>
+</header>
+
+<main id="log">
+  <p class="hint" id="hint">正在连接……</p>
+</main>
+
+<footer>
+  <div class="composer">
+    <textarea id="input" rows="1" placeholder="说点什么，Enter 发送，Shift+Enter 换行"></textarea>
+    <button class="send" id="send">发送</button>
+  </div>
+  <div class="opts" id="opts">
+    <label>服务地址 <input id="url" value="http://localhost:8000"></label>
+    <label>temperature <input id="temp" type="number" step="0.1" min="0" max="2" value="0.7"></label>
+    <label>max_tokens <input id="maxtok" type="number" step="32" min="16" max="4096" value="512"></label>
+    <button class="icon" id="clear">清空对话</button>
+  </div>
+</footer>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const state = { url: localStorage.getItem("t2t-url") || location.origin.replace(/:\d+$/, ":8000"),
+                model: null, msgs: [], busy: false };
+$("url").value = state.url;
+
+$("opts-btn").onclick = () => $("opts").classList.toggle("show");
+$("clear").onclick = () => { state.msgs = []; $("log").innerHTML = ""; };
+$("url").onchange = () => { state.url = $("url").value.replace(/\/$/, "");
+                            localStorage.setItem("t2t-url", state.url); connect(); };
+
+// 拉一次 /v1/models：服务在跑哪些模型（base 和挂上去的 LoRA 都在这里）
+async function connect() {
+  try {
+    const r = await fetch(state.url + "/v1/models");
+    const d = await r.json();
+    const ids = d.data.map((m) => m.id);
+    state.model = state.model && ids.includes(state.model) ? state.model : ids[0];
+    $("models").innerHTML = "";
+    ids.forEach((id) => {
+      const b = document.createElement("button");
+      // 带斜杠的是底座模型（Qwen/xxx），不带的是挂上去的 LoRA adapter
+      const isBase = id.includes("/");
+      b.className = "chip"; b.title = id;
+      b.innerHTML = (isBase ? id.split("/").pop() : id) +
+                    '<span class="tag">' + (isBase ? "base" : "LoRA") + "</span>";
+      b.setAttribute("aria-pressed", id === state.model);
+      b.onclick = () => { state.model = id; connect(); };
+      $("models").appendChild(b);
+    });
+    $("dot").classList.add("on");
+    $("hint").textContent = state.msgs.length ? "" : "已连上 " + state.url + "，问点什么。";
+  } catch (e) {
+    $("dot").classList.remove("on");
+    $("hint").textContent = "连不上 " + state.url + "：" + e.message + "（在设置里改地址）";
+  }
+}
+
+function turn(who, text) {
+  const d = document.createElement("div");
+  d.className = "turn";
+  d.innerHTML = '<div class="who"></div><div class="body"></div><div class="stats"></div>';
+  d.querySelector(".who").textContent = who;
+  d.querySelector(".body").textContent = text || "";
+  $("log").appendChild(d);
+  scrollTo(0, document.body.scrollHeight);
+  return d;
+}
+
+async function send() {
+  const text = $("input").value.trim();
+  if (!text || state.busy) return;
+  $("hint").textContent = "";
+  $("input").value = ""; state.busy = true; $("send").disabled = true;
+  turn("你", text);
+  state.msgs.push({ role: "user", content: text });
+
+  const out = turn(state.model.split("/").pop(), "");
+  const body = out.querySelector(".body"), stats = out.querySelector(".stats");
+  const t0 = performance.now();
+  let ttft = null, n = 0, acc = "";
+
+  try {
+    const r = await fetch(state.url + "/v1/chat/completions", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: state.model, messages: state.msgs, stream: true,
+                             temperature: parseFloat($("temp").value),
+                             max_tokens: parseInt($("maxtok").value, 10) }),
+    });
+    if (!r.ok) throw new Error("HTTP " + r.status + " " + (await r.text()).slice(0, 200));
+    // 服务端按 SSE 一块一块推过来，收到第一块的时刻就是 TTFT
+    const reader = r.body.getReader(), dec = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split("\n"); buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const p = line.slice(6).trim();
+        if (p === "[DONE]") continue;
+        const piece = JSON.parse(p).choices?.[0]?.delta?.content;
+        if (!piece) continue;
+        if (ttft === null) ttft = performance.now() - t0;
+        n++; acc += piece; body.textContent = acc;
+        const el = (performance.now() - t0) / 1000;
+        stats.textContent = `TTFT ${ttft.toFixed(0)} ms · ${(n / Math.max(el, 1e-6)).toFixed(1)} token/s · ${n} token`;
+        scrollTo(0, document.body.scrollHeight);
+      }
+    }
+    state.msgs.push({ role: "assistant", content: acc });
+    const el = (performance.now() - t0) / 1000, tpot = ttft === null ? 0 : (el * 1000 - ttft) / Math.max(n - 1, 1);
+    stats.innerHTML = `TTFT <b>${(ttft ?? 0).toFixed(0)} ms</b> · TPOT <b>${tpot.toFixed(0)} ms</b>` +
+                      ` · <b>${(n / el).toFixed(1)}</b> token/s · ${n} token · 端到端 <b>${el.toFixed(2)} s</b>`;
+  } catch (e) {
+    body.textContent = "出错了：" + e.message;
+  } finally {
+    state.busy = false; $("send").disabled = false; $("input").focus();
+  }
+}
+
+$("send").onclick = send;
+$("input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+});
+$("input").addEventListener("input", function () {
+  this.style.height = "auto"; this.style.height = Math.min(this.scrollHeight, 180) + "px";
+});
+connect();
+</script>

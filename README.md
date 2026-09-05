@@ -6,7 +6,7 @@
 
 `serving` · `CUDA` · `training` · `VLM` · `VLA` · `WAM`
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) ![Progress](https://img.shields.io/badge/progress-1%2F73_days-76B900.svg) ![Hardware](https://img.shields.io/badge/hardware-Jetson%20%2F%20any%20CUDA%20GPU-76B900.svg) ![Started](https://img.shields.io/badge/started-2026--09--04-informational.svg)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) ![Progress](https://img.shields.io/badge/progress-2%2F73_days-76B900.svg) ![Hardware](https://img.shields.io/badge/hardware-Jetson%20%2F%20any%20CUDA%20GPU-76B900.svg) ![Started](https://img.shields.io/badge/started-2026--09--04-informational.svg)
 
 ![](site_src/assets/hero-light.svg){.hero .light-content fig-alt="从 token 到扭矩：serving、CUDA、training、VLM、VLA、WAM 六个阶段，72 天"}
 ![](site_src/assets/hero-dark.svg){.hero .dark-content fig-alt="从 token 到扭矩：serving、CUDA、training、VLM、VLA、WAM 六个阶段，72 天"}
@@ -54,13 +54,13 @@ Jetson 特有的内容（统一内存、功耗墙、`nvpmodel`、NVFP4 部署）
 | Phase | 主题 | Days | 进度 |
 |---|---|---|---|
 | 0 | [Quickstart — 微调入门](days/day00_lora-quickstart/) | 00 | 1 / 1 |
-| 1 | Serving — 把模型跑起来并测准 | 01–12 | 0 / 12 |
+| 1 | [Serving — 把模型跑起来并测准](days/day01_vllm-first-serve/) | 01–12 | 1 / 12 |
 | 2 | CUDA — 从 kernel 到 profile | 13–24 | 0 / 12 |
 | 3 | Training — 从零训到微调 | 25–36 | 0 / 12 |
 | 4 | VLM — 把眼睛接上去 | 37–48 | 0 / 12 |
 | 5 | VLA — 生成动作 | 49–60 | 0 / 12 |
 | 6 | WAM — 世界动作模型 | 61–72 | 0 / 12 |
-| | | **Total** | **1 / 73** |
+| | | **Total** | **2 / 73** |
 
 <details open>
 <summary><b>Phase 0 · Quickstart</b></summary>
@@ -68,6 +68,15 @@ Jetson 特有的内容（统一内存、功耗墙、`nvpmodel`、NVFP4 部署）
 | Day | 主题 | 产出 |
 |---|---|---|
 | [00](days/day00_lora-quickstart/) | 用 LoRA 微调一个 9B 模型 | adapter + 风格命中率 |
+
+</details>
+
+<details open>
+<summary><b>Phase 1 · Serving</b></summary>
+
+| Day | 主题 | 产出 |
+|---|---|---|
+| [01](days/day01_vllm-first-serve/) | 把模型变成一个服务 | `serve.sh` + 第一组延迟数字 + 浏览器客户端 |
 
 </details>
 
