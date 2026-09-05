@@ -1,0 +1,31 @@
+<style>
+/* 插图点开放大。用自己的浮层而不是站点自带的 lightbox：那个认的是 <img>，
+   而我们的插图是内联 <svg>；而且内联的图能用页面的字体，打开 .svg 文件反而
+   会掉回系统字体。 */
+.figzoom { position: fixed; inset: 0; z-index: 2000; display: none;
+  align-items: center; justify-content: center; padding: 3vmin;
+  background: rgba(0, 0, 0, .78); cursor: zoom-out; }
+.figzoom.on { display: flex; }
+.figzoom > svg { width: min(96vw, 1600px); max-height: 94vh; height: auto;
+  background: var(--bs-body-bg, #fff); border-radius: 10px; padding: 1.2rem; }
+body.quarto-dark .figzoom > svg { background: #16181d; }
+a.lightbox:has(svg.fig) { cursor: zoom-in; }
+</style>
+<div class="figzoom" id="figzoom"></div>
+<script>
+(function () {
+  var box = document.getElementById("figzoom");
+  if (!box) return;
+  function close() { box.classList.remove("on"); box.innerHTML = ""; }
+  document.addEventListener("click", function (e) {
+    var svg = e.target.closest && e.target.closest("svg.fig");
+    if (!svg) return;
+    e.preventDefault();                    // 别跳到 .svg 文件去
+    box.innerHTML = "";
+    box.appendChild(svg.cloneNode(true));
+    box.classList.add("on");
+  });
+  box.addEventListener("click", close);
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") close(); });
+})();
+</script>

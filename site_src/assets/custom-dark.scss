@@ -1,11 +1,15 @@
 /*-- scss:defaults --*/
-$font-family-sans-serif: -apple-system, BlinkMacSystemFont, "Segoe UI",
-  "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif !default;
-$font-family-monospace: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace !default;
+// cosmo 默认 17px，正文偏大，收到 16px
+$font-size-base: 1rem !default;
+$font-family-sans-serif: "Noto Sans CJK SC", "Noto Sans SC Variable", "Noto Sans SC",
+  "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif !default;
+$font-family-monospace: "JetBrains Mono Variable", "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace !default;
 
 /*-- scss:rules --*/
 /* 正文插图：满宽、居中、去掉 figure 默认边距和空 caption */
-.fig { display: block; width: 100%; max-width: 900px; height: auto; margin: 1.1rem auto; }
+/* 插图现在是内联的 <svg>，尺寸交给 CSS，viewBox 负责等比缩放 */
+svg.fig, .fig { display: block; width: 100%; max-width: 900px; height: auto; margin: 1.1rem auto; }
+a.lightbox:has(svg.fig) { display: block; }
 figure:has(.fig) { margin: 0; }
 figure:has(.fig) figcaption { display: none; }
 
@@ -26,14 +30,16 @@ figure:has(.hero) figcaption { display: none; }
 .navbar-brand-container { gap: .6rem; }
 .navbar-logo { height: 24px; width: auto; max-height: 24px; }
 .navbar-title {
-  font-family: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+  font-family: $font-family-monospace;
   font-weight: 600; font-size: 1.02rem; letter-spacing: -.015em; color: #E8E8E8;
 }
 .navbar .nav-link { font-size: .92rem; font-weight: 500; padding-inline: .7rem !important; border-radius: 6px; }
 .navbar .nav-link:hover { background: rgba(118, 185, 0, .18); color: #9BD62F; }
 .navbar .nav-link.active { color: #9BD62F; font-weight: 600; }
 
-body { line-height: 1.75; letter-spacing: 0.01em; }
+/* cosmo 的 $font-size-base 会压过 defaults 里的值，所以在这里定死。
+   图里的字号也按 16 px 算（scripts/figures.py 的 BODY_PX），两边必须一致。 */
+body { font-size: 16px; line-height: 1.75; letter-spacing: 0.01em; }
 /* 行间公式：横向可滚动；上下留足内边距，否则 overflow 会切掉分式的上下沿 */
 .katex-display { overflow-x: auto; overflow-y: hidden; padding: .9rem .2rem; margin: .4rem 0; }
 .katex-display > .katex { white-space: nowrap; }

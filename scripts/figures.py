@@ -14,15 +14,17 @@ LIGHT = dict(fg="#1A1A1A", sub="#6B7280", box="#FFFFFF", line="#D7DBE0",
 DARK = dict(fg="#E8E8E8", sub="#9AA1A9", box="#242830", line="#3A404A",
             track="#2E333B", dim="#1E222A")
 
-FONTS = ('.m{font-family:"JetBrains Mono","SF Mono",Menlo,Consolas,monospace}'
-         '.s{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",'
-         '"PingFang SC","Noto Sans SC",sans-serif}')
+# 内联进页面之后这些类名是全局的，加前缀免得撞上站点自己的样式。
+FONTS = ('.t2t-m{font-family:"JetBrains Mono Variable","JetBrains Mono","SF Mono",'
+         'Menlo,Consolas,monospace}'
+         '.t2t-s{font-family:"Noto Sans CJK SC","Noto Sans SC Variable","Noto Sans SC",'
+         '"Source Han Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif}')
 
 # 站点上 .fig 图会被拉到正文栏宽（约 750 px），所以图里文字的渲染尺寸是
 #   svg 里的字号 × 750 / 画布宽
 # 正文是 17 px。要让图里的字看起来和正文一致，画布宽 W 的图应该用
 #   主标签 fs(W)、次要标签 fs(W, .88)、注解 fs(W, .8)
-BODY_PX = 17.0
+BODY_PX = 16.0
 REF_W = 750.0
 
 
@@ -43,5 +45,6 @@ def box(x, y, w, h, fill, stroke, rx=9, extra=""):
 
 
 def text(x, y, s, size=12, fill="#000", anchor="start", weight="400", cls="s", extra=""):
+    cls = " ".join("t2t-" + c for c in cls.split())
     return (f'<text x="{x}" y="{y}" class="{cls}" font-size="{size}" fill="{fill}" '
             f'text-anchor="{anchor}" font-weight="{weight}" {extra}>{s}</text>')

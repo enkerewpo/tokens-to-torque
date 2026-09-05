@@ -75,8 +75,25 @@ def rewrite_links(text: str, in_day: bool, in_sub: bool = None) -> str:
         # markdown 当成代码块，标签就原样显示出来了。
         text = text.replace("<!-- WIDGET: attn -->", "```{=html}\n" + w + "\n```")
 
-    # Quarto 的 lightbox: auto 只认位图，SVG 会被跳过——显式加 .lightbox 才能点开放大。
-    text = re.sub(r"\{\.fig (?!\.lightbox)", "{.fig .lightbox ", text)
+    # 插图直接内联进页面，不走 <img>：<img> 里的 SVG 是独立文档，拿不到页面
+    # 用 CDN 加载的字体，图里的中文会掉回系统字体，和正文对不上。内联之后它
+    # 用的就是页面的字体和字号，缩放也跟着正文走。外面套一个 .lightbox 的链接
+    # 保留点开放大。
+    def _inline_svg(m):
+        rel, attrs = m.group(1), m.group(2)
+        f = SRC / rel
+        if not f.exists():
+            return m.group(0)
+        svg = f.read_text(encoding="utf-8").strip()
+        classes = " ".join(re.findall(r"\.([a-z][a-z0-9-]*)", attrs))
+        svg = re.sub(r'\s(?:width|height)="[\d.]+"', "", svg, count=2)
+        svg = svg.replace("<svg ", f'<svg class="{classes}" ', 1)
+        # 不套 <a>：Quarto 自带的 glightbox 会抢过去，把 .svg 当图片打开，
+        # 那样又回到系统字体了。放大交给 assets/figzoom.html 里的浮层。
+        return "```{=html}\n" + svg + "\n```"
+
+    text = re.sub(r"!\[\]\((?:\.\./)*site_src/(assets/[^)]+\.svg)\)\{([^}]*)\}",
+                  _inline_svg, text)
 
     # 图片资源在 site_src/assets/：源码里可能写成 site_src/… 或 ../site_src/…，
     # 统一改成相对站点的 assets/…（子目录页面要加 ../）

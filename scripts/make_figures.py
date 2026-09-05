@@ -143,24 +143,58 @@ def fig_train_step(p):
 
 
 # ---------------------------------------------------------------- 浮点位布局
+# 画法跟着 IEEE 754 / bfloat16 的通行画法：每一位一个格子，字段名和位宽写在
+# 格子上方，边界位号写在下方，几种格式左对齐堆叠，方便直接比长度。
+FMTS = [("fp32", 1, 8, 23), ("fp16", 1, 5, 10), ("bf16", 1, 8, 7)]
+
+
 def fig_float_bits(p):
-    W, H = 760, 208
-    b, unit, x0 = [], 18.0, 68
-    for i, (name, sb, eb, mb) in enumerate([("fp32", 1, 8, 23), ("fp16", 1, 5, 10), ("bf16", 1, 8, 7)]):
-        y = 28 + i * 56
-        b.append(text(64, y + 28, name, fs(W), p["fg"], weight="700", anchor="end", cls="m"))
-        bx = x0
-        for label, bits, color in (("", sb, p["sub"]), ("指数", eb, GREEN), ("尾数", mb, BLUE)):
-            w = bits * unit
-            b.append(f'<rect x="{bx}" y="{y}" width="{w}" height="44" rx="5" fill="{color}" '
-                     f'opacity="{0.3 if not label else 0.9}"/>')
-            if w > 40:
-                b.append(text(bx + w / 2, y + 20, label, fs(W, .82), "#FFFFFF", anchor="middle", weight="600"))
-                b.append(text(bx + w / 2, y + 36, str(bits), fs(W, .82), "#FFFFFF", anchor="middle", cls="m"))
-            bx += w + 4
-        b.append(text(bx + 10, y + 28, f"{sb + eb + mb} 位", fs(W, .88), p["sub"], cls="m"))
-    b.append(text(76, H - 12, "绿＝指数（决定范围）　蓝＝尾数（决定精度）", fs(W, .88), p["sub"]))
-    return svg(W, H, "".join(b), "", "fp32 fp16 bf16 的位分配")
+    W = 800
+    CELL, GAP = 17.0, 1.0
+    X0, ROW_H = 96, 30
+    b = []
+    b.append(text(30, 34, "一个浮点数的位是怎么分的", fs(W, 1.06), p["fg"], weight="700"))
+    b.append(text(30, 58, "每个格子是 1 位，三行左对齐，可以直接比长度",
+                  fs(W, .8), p["sub"]))
+
+    y = 96
+    for name, sb, eb, mb in FMTS:
+        total = sb + eb + mb
+        b.append(text(X0 - 14, y + ROW_H / 2 + 5, name, fs(W), p["fg"],
+                      anchor="end", weight="700", cls="m"))
+        x = X0
+        for kind, n, col in (("符号", sb, p["sub"]), ("指数", eb, GREEN), ("尾数", mb, BLUE)):
+            gw = n * (CELL + GAP) - GAP
+            for i in range(n):
+                cx = x + i * (CELL + GAP)
+                b.append(f'<rect x="{cx:.1f}" y="{y}" width="{CELL:.1f}" height="{ROW_H}" '
+                         f'fill="{col}" fill-opacity="{0.85 if kind != "符号" else 0.3}"/>')
+            label = kind if kind == "符号" else f"{kind} {n} 位"
+            b.append(text(x + gw / 2, y - 8, label, fs(W, .8),
+                          p["fg"] if kind != "符号" else p["sub"], anchor="middle"))
+            x += gw + 6
+        b.append(text(x + 8, y + ROW_H / 2 + 5, f"共 {total} 位", fs(W, .8), p["sub"], cls="m"))
+
+        # 边界位号写在下方：最高位、指数两端、尾数最低位
+        marks = [(X0 + CELL / 2, total - 1),
+                 (X0 + CELL + 6 + CELL / 2, total - 2),
+                 (X0 + CELL + 6 + eb * (CELL + GAP) - GAP - CELL / 2, mb),
+                 (X0 + CELL + 6 + eb * (CELL + GAP) - GAP + 6 + CELL / 2, mb - 1),
+                 (X0 + CELL + 6 + eb * (CELL + GAP) - GAP + 6 + mb * (CELL + GAP) - GAP - CELL / 2, 0)]
+        for mx, idx in marks:
+            b.append(text(mx, y + ROW_H + 16, str(idx), fs(W, .72), p["sub"],
+                          anchor="middle", cls="m"))
+        y += ROW_H + 52
+
+    last = y - 22
+    b.append(text(30, last + 18, "灰＝符号位；绿＝指数，决定能表示多大多小；蓝＝尾数，决定同一量级里分得多细。",
+                  fs(W, .88), p["sub"]))
+    b.append(text(30, last + 42,
+                  "bf16 的指数位和 fp32 一样多，所以数值范围一样大，牺牲的是精度——这正是训练用它的理由。",
+                  fs(W, .88), p["fg"], weight="700"))
+    return svg(W, int(last + 66), "".join(b), "",
+               "fp32、fp16、bf16 的位分配：每格一位，字段名在上、位号在下；"
+               "bf16 的指数位与 fp32 相同，尾数更短")
 
 
 # ----------------------------------------------------------------------- SVD

@@ -1,13 +1,17 @@
 /*-- scss:defaults --*/
-$font-family-sans-serif: -apple-system, BlinkMacSystemFont, "Segoe UI",
-  "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif !default;
-$font-family-monospace: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace !default;
+// cosmo 默认 17px，正文偏大，收到 16px
+$font-size-base: 1rem !default;
+$font-family-sans-serif: "Noto Sans CJK SC", "Noto Sans SC Variable", "Noto Sans SC",
+  "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif !default;
+$font-family-monospace: "JetBrains Mono Variable", "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace !default;
 $body-color: #24292f !default;
 $link-color: #0b7285 !default;
 
 /*-- scss:rules --*/
 /* 正文插图：满宽、居中、去掉 figure 默认边距和空 caption */
-.fig { display: block; width: 100%; max-width: 900px; height: auto; margin: 1.1rem auto; }
+/* 插图现在是内联的 <svg>，尺寸交给 CSS，viewBox 负责等比缩放 */
+svg.fig, .fig { display: block; width: 100%; max-width: 900px; height: auto; margin: 1.1rem auto; }
+a.lightbox:has(svg.fig) { display: block; }
 figure:has(.fig) { margin: 0; }
 figure:has(.fig) figcaption { display: none; }
 
@@ -26,7 +30,7 @@ figure:has(.hero) figcaption { display: none; }
 .navbar-logo { height: 24px; width: auto; max-height: 24px; }
 /* 站名：等宽小写 + 收紧字距，箭头用绿色点出来 */
 .navbar-title {
-  font-family: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+  font-family: $font-family-monospace;
   font-weight: 600;
   font-size: 1.02rem;
   letter-spacing: -.015em;
@@ -44,7 +48,9 @@ figure:has(.hero) figcaption { display: none; }
 .navbar .nav-link.active { color: #4a7500; font-weight: 600; }
 
 /* 中文正文行距要比英文松，否则很挤 */
-body { line-height: 1.75; letter-spacing: 0.01em; }
+/* cosmo 的 $font-size-base 会压过 defaults 里的值，所以在这里定死。
+   图里的字号也按 16 px 算（scripts/figures.py 的 BODY_PX），两边必须一致。 */
+body { font-size: 16px; line-height: 1.75; letter-spacing: 0.01em; }
 h1, h2, h3 { letter-spacing: 0; }
 
 /* 公式在窄屏可横向滚动，不撑破版面 */
