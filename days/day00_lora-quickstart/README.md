@@ -248,8 +248,12 @@ python code/peek_model.py --model Qwen/Qwen3.5-9B --layer 3
 
 Qwen3.5 的做法是混着用：每 3 个线性注意力层配 1 个全注意力层。这天不需要理解线性注意力的数学，只需要知道**两种层里的线性层名字不一样**——下一段会看到，这直接决定了 LoRA 该怎么配。
 
-![](../../site_src/assets/fig-qwen-arch-light.svg){.fig .light-content fig-alt="Qwen3.5-9B 的 32 层结构，以及 LoRA 挂在每层哪些线性层上"}
-![](../../site_src/assets/fig-qwen-arch-dark.svg){.fig .dark-content fig-alt="Qwen3.5-9B 的 32 层结构，以及 LoRA 挂在每层哪些线性层上"}
+两种层的**骨架完全一样**，都是两段残差：先归一化、过 mixer、把结果加回输入；再归一化、过前馈网络、再加回一次。区别只在中间那个 mixer——全注意力块里是 `self_attn`（分组查询注意力，带 RoPE 和 QK-Norm），线性注意力块里是 `linear_attn`（一个叫 GatedDeltaNet 的模块：一维卷积加一个随时间递推的状态）。前馈网络两种块共用同一种：SwiGLU。
+
+![](../../site_src/assets/fig-qwen-arch-light.svg){.fig .light-content fig-alt="Qwen3.5-9B 的通路：embedding、32 个 decoder 块、RMSNorm 与 lm_head，每个块内部是两段残差，绿色标出的线性层是 LoRA 的挂点"}
+![](../../site_src/assets/fig-qwen-arch-dark.svg){.fig .dark-content fig-alt="Qwen3.5-9B 的通路：embedding、32 个 decoder 块、RMSNorm 与 lm_head，每个块内部是两段残差，绿色标出的线性层是 LoRA 的挂点"}
+
+图里绿色的名字就是 `nn.Linear`，灰色的是归一化、卷积和激活函数——后者没有权重矩阵可拆，LoRA 也就无从挂起。
 
 **LoRA 挂在哪，是能数出来的。** `target_modules="all-linear"` 匹配除 `lm_head` 外的每一个 `nn.Linear`，一共 248 个：
 
