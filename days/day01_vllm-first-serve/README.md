@@ -66,7 +66,7 @@ day 00 的脚本是这样的：启动进程 → 加载权重 → 回答一个问
 **定义。** 设一个请求生成了 $N$ 个 token：
 
 - **TTFT**（time to first token，首 token 延迟）：从发出请求到收到**第一个** token 的时间。
-- **TPOT**（time per output token，每个后续 token 的时间）：第一个 token 之后，平均每多生成一个 token 要多久。它的倒数就是常说的"每秒多少 token"。
+- **TPOT**（time per output token，每个后续 token 的时间）：第一个 token 之后，平均每多生成一个 token 要多久。它的倒数就是常说的“每秒多少 token”。
 - **端到端延迟**（end-to-end latency）：整条请求从发出到收完的总时间。
 
 三者的近似关系：
@@ -88,7 +88,7 @@ $$
 >
 > Thor 是**统一内存**（unified memory）：CPU 和 GPU 共用同一块 122 GB。这个比例切的是这块共享内存的一部分，切太狠会把系统本身挤爆——别的容器、页缓存、你的 ssh 会话都在同一块内存里。这里用 `0.30`（约 36 GB）：18 GB 权重 + KV cache + 工作区，够用且留足余量。
 
-vLLM 拿到这块内存后，先放权重，剩下的**全部**拿去当 KV cache。所以启动日志里会打印一行"KV cache 能存多少 token"，这个数决定了服务能同时处理多长、多少条请求——day 03 专门算这笔账。
+vLLM 拿到这块内存后，先放权重，剩下的**全部**拿去当 KV cache。所以启动日志里会打印一行“KV cache 能存多少 token”，这个数决定了服务能同时处理多长、多少条请求——day 03 专门算这笔账。
 
 ## 3. 动手
 
@@ -191,7 +191,44 @@ curl -s localhost:8000/v1/models | python3 -c 'import json,sys; print([m["id"] f
 python3 code/latency.py --model Qwen/Qwen3.5-9B --runs 5
 ```
 
-脚本做三件事：先跑一次热身（第一次请求会触发编译和缓存分配，不能计进统计）；然后开 `stream: true` 发 5 次，记录第一个数据块到达的时刻当作 TTFT；最后把中位数打出来。它只用标准库，在宿主机上跑，不进容器。
+脚本只用标准库，在宿主机上跑，不进容器。核心是这十几行：
+
+```python
+req = urllib.request.Request(f"{url}/v1/chat/completions", data=body,
+                             headers={"Content-Type": "application/json"})
+t0 = time.perf_counter()
+ttft, n = None, 0
+with urllib.request.urlopen(req) as r:
+    for raw in r:                       # 服务端按 SSE 一行一行推
+        line = raw.decode().strip()
+        if not line.startswith("data: "):
+            continue
+        payload = line[6:]
+        if payload == "[DONE]":
+            break
+        piece = json.loads(payload)["choices"][0].get("delta", {}).get("content")
+        if piece:
+            if ttft is None:
+                ttft = time.perf_counter() - t0     # 第一块到达 = TTFT
+            n += 1
+total = time.perf_counter() - t0
+```
+
+三处值得说：
+
+- **`stream: true` 是必需的**（§2.3）。不开的话服务端要等整段生成完才回，第一块到达的时刻就等于最后一块，TTFT 会等于端到端延迟。
+- **SSE 长什么样。** 服务端推的是一行行 `data: {...}` 的文本流（Server-Sent Events），最后一行固定是 `data: [DONE]`。每个 JSON 里 `choices[0].delta.content` 是这一小块新生成的文本，可能是一个 token，也可能是几个——所以脚本数的是**块数**，不是严格的 token 数。真要精确的 token 数得看响应尾部的 `usage`（脚本里用 `stream_options.include_usage` 要过来了）。
+- **热身必须有，而且不止一次。** 第一次请求会触发 kernel 编译和缓存分配。脚本跑一次热身再开始统计，但从 §5 第 3 条能看到，前两次都还偏慢。
+
+跑出来是这样：
+
+```text
+  第 1 次：TTFT  114.6 ms   端到端 11.65 s   输出 128 个 token   TPOT  90.8 ms/token   (11.0 token/s)
+  ...
+  第 5 次：TTFT   78.2 ms   端到端  8.00 s   输出 128 个 token   TPOT  62.4 ms/token   (16.0 token/s)
+
+中位数：TTFT 79.0 ms · TPOT 62.4 ms/token （16.0 token/s）· 端到端 8.00 s
+```
 
 ### 3.6 用浏览器聊天
 
@@ -205,6 +242,30 @@ bash code/ui.sh          # 在跑模型的那台机器上起个静态服务
 页面默认把服务地址猜成“同一台机器的 8000 端口”，所以在板子上托管时不用改任何配置。它会从 `/v1/models` 把 base 和 adapter 都拉出来做成按钮，点一下就切；每条回答下面实时显示 TTFT、TPOT 和 token/s——§2.3 那三个数，聊天的时候就能看见。
 
 “设置”里有个**显示思考过程**的开关，默认关着，原因见 §5 第 2 条。
+
+浏览器这边收流的写法和上面的 Python 是一回事，只是换了 API：
+
+```js
+const r = await fetch(state.url + "/v1/chat/completions", {
+  method: "POST", headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ model: state.model, messages: state.msgs, stream: true, ... }),
+});
+const reader = r.body.getReader(), dec = new TextDecoder();
+let buf = "";
+for (;;) {
+  const { value, done } = await reader.read();
+  if (done) break;
+  buf += dec.decode(value, { stream: true });
+  const lines = buf.split("\n"); buf = lines.pop();   // 最后一段可能被截断，留到下一轮
+  for (const line of lines) {
+    if (!line.startsWith("data: ")) continue;
+    const piece = JSON.parse(line.slice(6)).choices?.[0]?.delta?.content;
+    if (piece) { if (ttft === null) ttft = performance.now() - t0; body.textContent += piece; }
+  }
+}
+```
+
+`r.body.getReader()` 拿到的是**字节块**，不保证按行切开——一个 JSON 可能跨两块到达。所以要留一个 `buf`，把最后一段没写完的行留到下一轮再拼。这是所有流式客户端都要处理的事，写错的话表现是偶尔丢字或者报 JSON 解析失败。
 
 > [!NOTE]
 > **页面和模型不在同一台机器上时**
@@ -277,13 +338,14 @@ vLLM 报的 KV cache 容量：**base 895 946 token，挂 adapter 后 879 130 tok
 
    关掉的办法是在请求里加 `"chat_template_kwargs": {"enable_thinking": false}`——这不是 OpenAI 的官方字段，是 vLLM 的扩展。day 00 是在代码里调 `apply_chat_template(enable_thinking=False)`，到了服务端换成这个入口。`code/ui/index.html` 默认就是关的，设置里可以打开看看它在想什么。
 3. **热身不止一次。** 前两次请求明显更慢（端到端 11.6 s、11.1 s），第三次开始才稳定在 8.0 s。只热身一次就开测会把数字拉高 40%。day 05 做正经 benchmark 时要专门处理这件事。
-4. **serving 必须另起一个容器。** `t2t` 是 pytorch 镜像，vLLM 在 Jetson 上要用 NGC 的 vllm 镜像，一个容器只能有一个镜像。约定和理由写进了 [SETUP](../../setup.md#为什么-serving-要另起一个容器)。
-5. **浏览器走系统代理时，页面打不开还只给一个 502。** 如果你开着 Clash 这类代理客户端，浏览器会把请求交给代理，而代理连不到你内网或 Tailscale 上的地址，回给你一个 502——看起来像服务挂了，其实服务好好的（用 `curl` 一试就通，因为 curl 默认不走系统代理）。把对应网段加进代理的绕过列表即可——家用内网一般是 `192.168.x.x`，Tailscale 分配的地址都在 `100.64.x.x`–`100.127.x.x` 这一段（CGNAT 网段），很多代理客户端的默认绕过规则里没有它。
-6. **`--gpu-memory-utilization` 在统一内存上切的是整块内存**（§2.4），不是独显那种"反正显存是我的"。这台机器上还跑着别的容器，切太狠会把系统挤爆。
+4. **`TextIteratorStreamer` 吐的是文本块，不是 token。** 写 `baseline_hf.py` 时按块数算 TPOT，得到 127 ms/token；改成从返回序列的长度数真实 token 数之后是 101 ms/token——差了 25%。同样的坑在 SSE 那边也有（§3.5），凡是“数流式回调次数”来估 token 速度的地方都要先确认一次回调等于一个 token。
+5. **serving 必须另起一个容器。** `t2t` 是 pytorch 镜像，vLLM 在 Jetson 上要用 NGC 的 vllm 镜像，一个容器只能有一个镜像。约定和理由写进了 [SETUP](../../setup.md#为什么-serving-要另起一个容器)。
+6. **浏览器走系统代理时，页面打不开还只给一个 502。** 如果你开着 Clash 这类代理客户端，浏览器会把请求交给代理，而代理连不到你内网或 Tailscale 上的地址，回给你一个 502——看起来像服务挂了，其实服务好好的（用 `curl` 一试就通，因为 curl 默认不走系统代理）。把对应网段加进代理的绕过列表即可——家用内网一般是 `192.168.x.x`，Tailscale 分配的地址都在 `100.64.x.x`–`100.127.x.x` 这一段（CGNAT 网段），很多代理客户端的默认绕过规则里没有它。
+7. **`--gpu-memory-utilization` 在统一内存上切的是整块内存**（§2.4），不是独显那种“反正显存是我的”。这台机器上还跑着别的容器，切太狠会把系统挤爆。
 
 ## 6. 延伸
 
 - vLLM 的 [OpenAI 兼容 server 文档](https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html)——把上面用到的三个端点之外的东西过一眼，尤其是 `/v1/completions` 和 `/metrics`。
-- 想要一个功能更全的客户端（会话历史、多模型管理、RAG）可以起 [Open WebUI](https://github.com/open-webui/open-webui)，它就是指到 OpenAI 兼容接口上工作的。这里不用它，因为一个不到 200 行的 HTML 更能说清"接口一样就能换客户端"这件事。
+- 想要一个功能更全的客户端（会话历史、多模型管理、RAG）可以起 [Open WebUI](https://github.com/open-webui/open-webui)，它就是指到 OpenAI 兼容接口上工作的。这里不用它，因为一个不到 200 行的 HTML 更能说清“接口一样就能换客户端”这件事。
 
 **明天要回答的问题：** 一个请求从 HTTP 进来，到第一个 token 出去，在 vLLM 里到底经过了哪些对象？调度器凭什么决定这一步先算谁？→ day 02 读源码。
