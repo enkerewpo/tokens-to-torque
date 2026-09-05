@@ -1,0 +1,51 @@
+<script>
+// 接管导航栏那个切换按钮，让它在 跟随系统 → 浅色 → 深色 之间循环。
+// 只调用 Quarto 的公开函数 window.quartoToggleColorScheme()：它按哨兵值翻转，
+// 而哨兵值和页面当前状态始终一致，所以“需要变就翻一次”是安全的。
+(function () {
+  var t = window.t2tTheme;
+  if (!t || typeof window.quartoToggleColorScheme !== "function") return;
+  var ORDER = ["auto", "light", "dark"];
+  var LABEL = { auto: "主题：跟随系统（点击切到浅色）",
+                light: "主题：浅色（点击切到深色）",
+                dark: "主题：深色（点击切回跟随系统）" };
+  var flip = window.quartoToggleColorScheme;
+
+  function isDark() { return document.body.classList.contains("quarto-dark"); }
+
+  function label(m) {
+    var els = document.querySelectorAll(".quarto-color-scheme-toggle");
+    for (var i = 0; i < els.length; i++) {
+      els[i].setAttribute("title", LABEL[m]);
+      els[i].setAttribute("aria-label", LABEL[m]);
+      els[i].setAttribute("data-theme-mode", m);
+    }
+  }
+
+  function goto(m) {
+    try { localStorage.setItem(t.MODE, m); } catch (e) {}
+    // 顺序要紧：flip() 是按哨兵值取反的，而哨兵值此刻还等于页面当前状态。
+    // 先写哨兵再 flip，会被它取反回原状态。
+    if (t.wantDark(m) !== isDark()) flip();
+    t.apply(m);
+    label(m);
+  }
+
+  window.quartoToggleColorScheme = function () {
+    goto(ORDER[(ORDER.indexOf(t.mode()) + 1) % ORDER.length]);
+  };
+
+  if (window.matchMedia) {
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    var onChange = function (e) {
+      if (t.mode() !== "auto") return;
+      if (e.matches !== isDark()) flip();
+      t.apply("auto");
+    };
+    if (mq.addEventListener) mq.addEventListener("change", onChange);
+    else if (mq.addListener) mq.addListener(onChange);
+  }
+
+  label(t.mode());
+})();
+</script>

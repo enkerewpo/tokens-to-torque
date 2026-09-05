@@ -59,6 +59,11 @@ format:
     theme:
       light: [cosmo, assets/custom.scss]
       dark: [darkly, assets/custom-dark.scss]
+    # 主题三态（跟随系统 / 浅色 / 深色）。Quarto 自己默认写死浅色，见 assets/theme-head.html
+    include-in-header:
+      - assets/theme-head.html
+    include-after-body:
+      - assets/theme-body.html
     toc: true
     toc-depth: 3
     toc-title: 目录

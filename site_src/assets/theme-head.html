@@ -1,0 +1,25 @@
+<script>
+// 主题三态：auto（跟随系统）/ light / dark。
+// Quarto 自己只有两态，而且默认写死浅色、只认 localStorage 里点过的那次选择。
+// 这段在 <head> 里先跑，把 Quarto 的哨兵值按当前模式写好，它的初始化脚本随后
+// 读到的就是对的，页面不会先浅后深地闪一下。
+(function () {
+  var MODE = "t2t-theme-mode";      // auto | light | dark
+  var QK = "quarto-color-scheme";   // Quarto: default | alternate
+  function sysDark() {
+    return !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  }
+  function mode() {
+    try { return localStorage.getItem(MODE) || "auto"; } catch (e) { return "auto"; }
+  }
+  function wantDark(m) { return m === "dark" || (m === "auto" && sysDark()); }
+  function apply(m) {
+    var dark = wantDark(m);
+    try { localStorage.setItem(QK, dark ? "alternate" : "default"); } catch (e) {}
+    return dark;
+  }
+  apply(mode());
+  window.t2tTheme = { MODE: MODE, QK: QK, mode: mode, apply: apply,
+                      sysDark: sysDark, wantDark: wantDark };
+})();
+</script>
