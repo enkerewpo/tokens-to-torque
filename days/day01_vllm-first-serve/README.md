@@ -138,7 +138,7 @@ Maximum concurrency for 8,192 tokens per request: 107.32x
 
 ### 2.6 vLLM 这个工具怎么用
 
-**它有两种用法，这天用的是第二种。**
+**vLLM 有两种用法：在 Python 里直接跑一批，或者起一个常驻的服务。** 区别只有一个——有没有 HTTP。
 
 | | 离线批量 | 在线服务 |
 |---|---|---|
@@ -147,7 +147,7 @@ Maximum concurrency for 8,192 tokens per request: 107.32x
 | 模型什么时候卸载 | 进程结束就卸 | 你停服务为止 |
 | 适合什么 | 一次性把一批提示跑完（造数据、批量评测） | 常驻，随时来请求 |
 
-离线那条也就十几行，`code/offline.py` 是能跑的最小例子：
+§3 起的是右边那种。左边这条也就十几行，`code/offline.py` 是能跑的最小例子：
 
 ```python
 from vllm import LLM, SamplingParams
@@ -189,7 +189,7 @@ vllm serve --help=max-model-len     # 查一个参数：说明 + 默认值
 vllm serve --help=ModelConfig       # 查一整组
 ```
 
-这天用到的几个，按作用分组：
+上面用到的几个，按作用分组：
 
 | 参数 | 作用 |
 |---|---|
