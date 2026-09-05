@@ -18,6 +18,18 @@ FONTS = ('.m{font-family:"JetBrains Mono","SF Mono",Menlo,Consolas,monospace}'
          '.s{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",'
          '"PingFang SC","Noto Sans SC",sans-serif}')
 
+# 站点上 .fig 图会被拉到正文栏宽（约 750 px），所以图里文字的渲染尺寸是
+#   svg 里的字号 × 750 / 画布宽
+# 正文是 17 px。要让图里的字看起来和正文一致，画布宽 W 的图应该用
+#   主标签 fs(W)、次要标签 fs(W, .88)、注解 fs(W, .8)
+BODY_PX = 17.0
+REF_W = 750.0
+
+
+def fs(w, k=1.0):
+    """画布宽 w 的图里，渲染出来等于正文 k 倍大小的字号。"""
+    return round(BODY_PX * k * w / REF_W, 1)
+
 
 def svg(w, h, body, css="", label=""):
     return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" '
