@@ -729,6 +729,110 @@ def fig_multihead_shapes(p):
                "算出 (16,T,T) 的权重，输出 (16,T,256)，合头回 (T,4096)")
 
 
+# ------------------------------------------------ 静态批处理 vs 连续批处理
+def fig_batching(p):
+    W = QW
+    CW, CH, GAPY = 26, 26, 10
+    X0 = 108
+    b = [_defs(p)]
+    b.append(text(30, 34, "为什么连续批处理更快", fs(W, 1.06), p["fg"], weight="700"))
+    b.append(text(30, 58, "横轴是时间步，一格 = 这一步算了这条请求的一个 token",
+                  fs(W, .8), p["sub"]))
+
+    def timeline(y, title, rows, note):
+        out = [text(30, y - 10, title, fs(W), p["fg"], weight="700")]
+        for i, (name, cells) in enumerate(rows):
+            ry = y + i * (CH + GAPY)
+            out.append(text(X0 - 12, ry + CH / 2 + 5, name, fs(W, .8), p["sub"],
+                            anchor="end", cls="m"))
+            for j, kind in enumerate(cells):
+                cx = X0 + j * (CW + 3)
+                if kind == ".":
+                    continue
+                fill = {"r": GREEN, "w": p["sub"], "n": BLUE}[kind]
+                op = {"r": .8, "w": .18, "n": .8}[kind]
+                out.append(f'<rect x="{cx}" y="{ry}" width="{CW}" height="{CH}" '
+                           f'fill="{fill}" fill-opacity="{op}"/>')
+        ny = y + len(rows) * (CH + GAPY) + 6
+        out.append(text(X0, ny, note, fs(W, .8), p["sub"]))
+        return "".join(out), ny
+
+    # r = 在算，w = 空转（等同批其他请求），n = 新请求补进来
+    static_rows = [("请求 1", list("rrrrrrrrrr")),
+                   ("请求 2", list("rrrwwwwwww")),
+                   ("请求 3", list("rrrrrrwwww")),
+                   ("请求 4", list(".........."))]
+    s1, y1 = timeline(96, "静态批处理：一批一起开始、一起结束",
+                      static_rows,
+                      "灰格是空转：请求 2 早就答完了，但要等最长的那条结束才能收批。请求 4 只能排队等下一批。")
+    b.append(s1)
+
+    cont_rows = [("请求 1", list("rrrrrrrrrr")),
+                 ("请求 2", list("rrr.......")),
+                 ("请求 3", list("rrrrrr....")),
+                 ("请求 4", list("...nnnnnnn"))]
+    s2, y2 = timeline(y1 + 54, "连续批处理：每一步重新决定这轮算谁",
+                      cont_rows,
+                      "请求 2 一答完就离场，空出来的位置立刻让请求 4 补上，GPU 不空转。")
+    b.append(s2)
+
+    b.append(text(30, y2 + 34, "调度是逐步做的，不是逐批做的——这是 vLLM 吞吐高的主要原因，day 04 会把这条曲线量出来。",
+                  fs(W, .88), p["fg"], weight="700"))
+    return svg(W, int(y2 + 58), "".join(b), "",
+               "静态批处理里短请求算完要空等整批结束；连续批处理每步重新调度，"
+               "请求答完即离场，新请求立刻补位")
+
+
+# ------------------------------------------------ KV cache：连续分配 vs 分页
+def fig_paged(p):
+    W = QW
+    b = [_defs(p)]
+    b.append(text(30, 34, "KV cache 为什么要分页", fs(W, 1.06), p["fg"], weight="700"))
+    b.append(text(30, 58, "一条请求最终要多长的缓存，发的时候并不知道",
+                  fs(W, .8), p["sub"]))
+
+    # 左：按最大长度预留
+    LX, LW, RH = 30, 330, 30
+    b.append(text(LX, 96, "按最大长度预留", fs(W), p["fg"], weight="700"))
+    for i, used in enumerate([0.25, 0.45, 0.15]):
+        y = 112 + i * (RH + 12)
+        b.append(f'<rect x="{LX}" y="{y}" width="{LW}" height="{RH}" fill="{p["sub"]}" '
+                 f'fill-opacity=".15"/>')
+        b.append(f'<rect x="{LX}" y="{y}" width="{LW * used:.0f}" height="{RH}" '
+                 f'fill="{BLUE}" fill-opacity=".8"/>')
+        b.append(text(LX + LW + 10, y + RH / 2 + 5, f"请求 {i+1}", fs(W, .8), p["sub"], cls="m"))
+    b.append(text(LX, 112 + 3 * (RH + 12) + 12, "蓝色是真的用上的，灰色是白占的",
+                  fs(W, .8), p["sub"]))
+
+    # 右：分页
+    RX = 470
+    b.append(text(RX, 96, "分页", fs(W), p["fg"], weight="700"))
+    BS, BG = 34, 6
+    for i, n in enumerate([3, 5, 2]):
+        y = 112 + i * (RH + 12)
+        for j in range(n):
+            b.append(f'<rect x="{RX + j * (BS + BG)}" y="{y}" width="{BS}" height="{RH}" '
+                     f'fill="{GREEN}" fill-opacity=".75"/>')
+        b.append(text(RX + 5 * (BS + BG) + 8, y + RH / 2 + 5, f"{n} 块", fs(W, .8),
+                      p["sub"], cls="m"))
+    b.append(text(RX, 112 + 3 * (RH + 12) + 12, "按需要一块块拿，用完就还",
+                  fs(W, .8), p["sub"]))
+
+    y = 112 + 3 * (RH + 12) + 44
+    r = Rect(30, y, W - 60, 96)
+    b.append(box(r.x, r.y, r.w, r.h, p["dim"], p["line"], rx=10))
+    b.append(text(r.x + 16, r.y + 28, "块不必挨着放", fs(W), p["fg"], weight="700"))
+    b.append(text(r.x + 16, r.y + 52,
+                  "每条请求带一张表，记着自己的块按什么顺序拼起来——和操作系统的虚拟内存分页是同一个套路。",
+                  fs(W, .8), p["sub"]))
+    b.append(text(r.x + 16, r.y + 76,
+                  "好处：几乎没有白占的空间；两条请求前缀相同时，还能共用同一批块。",
+                  fs(W, .8), p["sub"]))
+    return svg(W, int(r.bottom + 30), "".join(b), "",
+               "按最大长度预留会白占大量缓存；分页按需分配固定大小的块，"
+               "块之间不必连续，相同前缀还能共享")
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     for name, fn in {"fig-lora-arch": fig_lora_arch, "fig-train-step": fig_train_step,
@@ -738,7 +842,9 @@ def main():
                      "fig-attention": fig_attention,
                      "fig-kv-cache": fig_kv_cache,
                      "fig-multihead": fig_multihead,
-                     "fig-multihead-shapes": fig_multihead_shapes}.items():
+                     "fig-multihead-shapes": fig_multihead_shapes,
+                     "fig-batching": fig_batching,
+                     "fig-paged": fig_paged}.items():
         for suffix, pal in (("light", LIGHT), ("dark", DARK)):
             (OUT / f"{name}-{suffix}.svg").write_text(fn(pal))
         print(f"  {name}  {(OUT / f'{name}-light.svg').stat().st_size} 字节")

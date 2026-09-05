@@ -90,7 +90,53 @@ $$
 
 vLLM 拿到这块内存后，先放权重，剩下的**全部**拿去当 KV cache。所以启动日志里会打印一行“KV cache 能存多少 token”，这个数决定了服务能同时处理多长、多少条请求——day 03 专门算这笔账。
 
-### 2.5 vLLM 这个工具怎么用
+### 2.5 vLLM 凭什么比直接 `generate` 快
+
+§4 量出来的是：**单请求快 1.6 倍，首 token 快 3.3 倍**。原因有四条，前三条是 serving 引擎的核心机制，正好对应后面三天。
+
+**一、连续批处理（continuous batching）。**
+
+GPU 一次只算一个请求时，矩阵形状很“瘦”，算力大部分闲着。把几个请求的 token 拼成一个更大的矩阵一起算，时间几乎不变，吞吐成倍涨——这叫**批处理**。
+
+老办法是**静态批处理**：凑够一批一起开始，一起结束。问题是每条请求生成多少 token 是不一样的，短的那条早就答完了，却要陪着最长的那条空转到底；期间新来的请求只能排队等下一批。
+
+vLLM 的做法是**每一步都重新决定这一轮算哪些请求**：谁答完了就立刻离场，空出来的位置马上让排队的请求补上。
+
+![](../../site_src/assets/fig-batching-light.svg){.fig .light-content fig-alt="静态批处理里短请求算完要空等整批结束；连续批处理每步重新调度，请求答完即离场，新请求立刻补位"}
+![](../../site_src/assets/fig-batching-dark.svg){.fig .dark-content fig-alt="静态批处理里短请求算完要空等整批结束；连续批处理每步重新调度，请求答完即离场，新请求立刻补位"}
+
+day 04 会把并发从 1 加到 64，量出吞吐涨了多少、延迟又付出了什么。
+
+**二、分页的 KV cache（PagedAttention）。**
+
+先回忆 [附录 D.8](../../appendix/transformer.md)：为了不每步重算，模型要把每个 token 的 K、V 存下来，这块缓存随生成长度增长。麻烦在于**一条请求最终要多长，发的时候并不知道**——用户可能问一句话就走，也可能让它写两千字。
+
+按最大长度给每条请求预留一大块，是最省事的做法，也最浪费：绝大多数请求用不到那么长，预留的部分就那么空着，别的请求还进不来。
+
+vLLM 把缓存切成**固定大小的块**，谁要用就给谁几块，块之间不必挨着放，每条请求自己带一张表记着块的顺序——和操作系统的虚拟内存分页是同一个套路，所以这个机制叫 PagedAttention[^paged]。
+
+![](../../site_src/assets/fig-paged-light.svg){.fig .light-content fig-alt="按最大长度预留会白占大量缓存；分页按需分配固定大小的块，块之间不必连续，相同前缀还能共享"}
+![](../../site_src/assets/fig-paged-dark.svg){.fig .dark-content fig-alt="按最大长度预留会白占大量缓存；分页按需分配固定大小的块，块之间不必连续，相同前缀还能共享"}
+
+这台机器上的真实数字，全在启动日志里：
+
+```text
+Setting attention block size to 528 tokens        ← 一块存 528 个 token 的 K、V
+GPU KV cache size: 879,130 tokens                 ← 总共能存这么多
+Maximum concurrency for 8,192 tokens per request: 107.32x
+```
+
+最后一行的意思是：如果每条请求都占满 8192 token，这块缓存能同时装下 107 条。**块大小 528 是这个模型特有的**——它是混合注意力（day 00 §2.9），vLLM 要把注意力的页大小对齐到线性注意力的页大小，所以取了这个值；常见的纯注意力模型通常是 16。day 03 会拿这几个数和手算的公式对账。
+
+**三、prefill 和 decode 混在同一批里算。**
+
+[附录 D.8](../../appendix/transformer.md) 说过，prefill（把提示一次算完）吃算力，decode（每步出一个 token）吃访存带宽。如果一批里只有 decode，算力闲着；只有 prefill，带宽闲着。vLLM 的调度器会把两种活混在同一步里，还能把长提示的 prefill 切成几段分批塞进去（chunked prefill），免得一条长请求把所有人卡住。day 04 会看到它对延迟分布的影响。
+
+**四、和 serving 无关的那部分：编译和图捕获。**
+
+启动日志里 `torch.compile took 55.93 s` 和后面的 CUDA graph 捕获，做的是把每一步 decode 的算子融合、把 kernel 启动开销预先录好。这跟批处理没关系，纯粹是把同一件事算得更快——**这也是为什么单请求（batch=1）也能快 1.6 倍**。
+
+### 2.6 vLLM 这个工具怎么用
 
 **它有两种用法，这天用的是第二种。**
 
@@ -429,3 +475,7 @@ vLLM 报的 KV cache 容量：**base 895 946 token，挂 adapter 后 879 130 tok
 - 想要一个功能更全的客户端（会话历史、多模型管理、RAG）可以起 [Open WebUI](https://github.com/open-webui/open-webui)，它就是指到 OpenAI 兼容接口上工作的。这里不用它，因为一个不到 200 行的 HTML 更能说清“接口一样就能换客户端”这件事。
 
 **明天要回答的问题：** 一个请求从 HTTP 进来，到第一个 token 出去，在 vLLM 里到底经过了哪些对象？调度器凭什么决定这一步先算谁？→ day 02 读源码。
+
+## 参考文献
+
+[^paged]: Kwon et al., *Efficient Memory Management for Large Language Model Serving with PagedAttention*, SOSP 2023，§4 讲分页与共享。[arXiv:2309.06180](https://arxiv.org/abs/2309.06180)
