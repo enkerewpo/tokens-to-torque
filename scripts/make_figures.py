@@ -645,6 +645,54 @@ def fig_multihead(p):
                "输出拼回 4096 维后过 o_proj")
 
 
+# ------------------------------------------ 多头：一层里张量形状怎么变
+# T = 这次输入的 token 数；16 × 256 = 4096。形状写法和 PyTorch 一致。
+MH_FLOW = [
+    ("输入 h", "(T, 4096)", "每个位置一个 4096 维向量", BLUE),
+    ("q  k  v", "(T, 4096) 各一个", "各乘 W_Q / W_K / W_V", BLUE),
+    ("拆头（reshape）", "(16, T, 256)", "4096 拆成 16 × 256", AMBER),
+    ("分数 = q @ kᵀ / √256", "(16, T, T)", "每个头一张 T×T 表", GREEN),
+    ("加因果掩码，逐行 softmax", "(16, T, T)", "形状不变，每行和为 1", GREEN),
+    ("权重 @ v", "(16, T, 256)", "每个头输出 256 维", GREEN),
+    ("合头（reshape）", "(T, 4096)", "16 × 256 拼回 4096", AMBER),
+    ("× W_O（o_proj）", "(T, 4096)", "4096 × 4096 的矩阵", BLUE),
+]
+
+
+def fig_multihead_shapes(p):
+    W = QW
+    b = [_defs(p)]
+    b.append(text(30, 34, "一层注意力里，形状怎么变", fs(W, 1.06), p["fg"], weight="700"))
+    b.append(text(30, 58, "T = 这次输入的 token 数；16 个头 × 每头 256 维 = 4096",
+                  fs(W, .88), p["sub"]))
+
+    y = 84
+    H2, GAPY = 56, 30
+    for i, (name, shape, note, col) in enumerate(MH_FLOW):
+        r = Rect(30, y, 268, H2)
+        b.append(box(r.x, r.y, r.w, r.h, p["box"], col, rx=8))
+        b.append(text(r.x + 16, r.cy + 6, name, fs(W, .88), p["fg"], weight="600", cls="m"))
+        b.append(f'<rect x="{r.right + 18}" y="{r.y + 8}" width="170" height="{H2 - 16}" '
+                 f'rx="6" fill="{col}" fill-opacity=".12" stroke="{col}" stroke-width="1.2"/>')
+        b.append(text(r.right + 103, r.cy + 6, shape, fs(W, .88), p["fg"],
+                      anchor="middle", weight="700", cls="m"))
+        b.append(text(r.right + 204, r.cy + 6, note, fs(W, .8), p["sub"]))
+        if i < len(MH_FLOW) - 1:
+            b.append(f'<path d="M{r.cx} {r.bottom}V{r.bottom + GAPY}" stroke="{p["sub"]}" '
+                     f'stroke-width="1.6" marker-end="url(#qa)"/>')
+        y = r.bottom + GAPY
+
+    b.append(text(30, y + 24, "进来 (T, 4096)，出去还是 (T, 4096)——注意力不改变形状，只改变内容。",
+                  fs(W, .88), p["fg"], weight="700"))
+    b.append(text(30, y + 50, "橙色那两步只是换个看法（reshape），一次乘法都没有；真正的计算在绿色三步和两端的矩阵乘法里。",
+                  fs(W, .8), p["sub"]))
+    b.append(text(30, y + 74, "这个模型用 GQA：k、v 只有 4 组，形状是 (4, T, 256)，算的时候一组给 4 个查询头共用。",
+                  fs(W, .8), p["sub"]))
+    return svg(W, int(y + 98), "".join(b), "",
+               "一层注意力里张量形状的变化：(T,4096) 经拆头成 (16,T,256)，"
+               "算出 (16,T,T) 的权重，输出 (16,T,256)，合头回 (T,4096)")
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     for name, fn in {"fig-lora-arch": fig_lora_arch, "fig-train-step": fig_train_step,
@@ -653,7 +701,8 @@ def main():
                      "fig-qwen-block": fig_qwen_block,
                      "fig-attention": fig_attention,
                      "fig-kv-cache": fig_kv_cache,
-                     "fig-multihead": fig_multihead}.items():
+                     "fig-multihead": fig_multihead,
+                     "fig-multihead-shapes": fig_multihead_shapes}.items():
         for suffix, pal in (("light", LIGHT), ("dark", DARK)):
             (OUT / f"{name}-{suffix}.svg").write_text(fn(pal))
         print(f"  {name}  {(OUT / f'{name}-light.svg').stat().st_size} 字节")
