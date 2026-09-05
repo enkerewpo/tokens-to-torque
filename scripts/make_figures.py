@@ -581,6 +581,70 @@ def fig_kv_cache(p):
                "读缓存再追加")
 
 
+# ------------------------------------------------------ 多头：切开、各算各的、拼回去
+def fig_multihead(p):
+    W = QW
+    b = [_defs(p)]
+    b.append(text(30, 34, "多头：把向量切开，每段各算一遍", fs(W, 1.06), p["fg"], weight="700"))
+
+    X0, BW2, H1 = 30, 690, 38
+    NSEG = 16
+    seg = BW2 / NSEG
+
+    def bar(y, label, note):
+        out = [text(X0, y - 10, label, fs(W, .88), p["sub"])]
+        for i in range(NSEG):
+            x = X0 + i * seg
+            out.append(f'<rect x="{x:.1f}" y="{y}" width="{seg - 2:.1f}" height="{H1}" rx="3" '
+                       f'fill="{BLUE}" fill-opacity="{0.5 if i % 2 else 0.3}" '
+                       f'stroke="{BLUE}" stroke-width="1"/>')
+        out.append(text(X0 + BW2, y + H1 + 20, note, fs(W, .8), p["sub"], anchor="end"))
+        return "".join(out), Rect(X0, y, BW2, H1)
+
+    s1, r1 = bar(84, "查询 q（4096 维）——键 k、值 v 同样切", "16 段，每段 256 维")
+    b.append(s1)
+
+    # 三个代表性的头：各自一张 T×T 表
+    def tri(x, y, n, side):
+        cell = side / n
+        out = []
+        for i in range(n):
+            for j in range(i + 1):
+                out.append(f'<rect x="{x + j * cell:.1f}" y="{y + i * cell:.1f}" '
+                           f'width="{cell - 1:.1f}" height="{cell - 1:.1f}" '
+                           f'fill="{GREEN}" fill-opacity="{0.25 + 0.5 * ((i + j) % 3) / 2:.2f}"/>')
+        out.append(f'<rect x="{x}" y="{y}" width="{side}" height="{side}" fill="none" '
+                   f'stroke="{p["line"]}" stroke-width="1"/>')
+        return "".join(out)
+
+    hy, side = 196, 96
+    spots = [(70, "头 1", 0), (300, "头 2", 1), (560, "头 16", 15)]
+    for hx, name, si in spots:
+        b.append(tri(hx, hy, 6, side))
+        b.append(text(hx + side / 2, hy + side + 24, name, fs(W, .88), p["fg"],
+                      anchor="middle", weight="700"))
+        # 从对应的那一段引下来
+        sx = X0 + si * seg + seg / 2
+        b.append(f'<path d="M{sx:.1f} {r1.bottom}V{hy - 22}H{hx + side / 2}V{hy}" fill="none" '
+                 f'stroke="{p["sub"]}" stroke-width="1.5" marker-end="url(#qa)"/>')
+    b.append(text(455, hy + side / 2 + 6, "…", fs(W, 1.2), p["sub"], anchor="middle"))
+    b.append(text(30, hy + side + 52,
+                  "每段自己走一遍“打分 → softmax → 加权求和”，得到自己的一张 T×T 权重表",
+                  fs(W, .88), p["sub"]))
+
+    s2, r2 = bar(hy + side + 92, "16 段的输出首尾相接，又是 4096 维", "")
+    b.append(s2)
+    ob = Rect(X0 + 210, r2.bottom + 40, 270, 56)
+    b.append(_card(p, ob, "o_proj", "4096 × 4096", GREEN))
+    b.append(f'<path d="M{ob.cx} {r2.bottom}V{ob.top}" stroke="{p["sub"]}" '
+             f'stroke-width="1.6" marker-end="url(#qa)"/>')
+    b.append(text(ob.right + 16, ob.cy + 6, "混合 16 段的结果，再加回主干",
+                  fs(W, .88), p["sub"]))
+    return svg(W, int(ob.bottom + 34), "".join(b), "",
+               "多头注意力：4096 维切成 16 段各 256 维，每段各算一张 T×T 权重表，"
+               "输出拼回 4096 维后过 o_proj")
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     for name, fn in {"fig-lora-arch": fig_lora_arch, "fig-train-step": fig_train_step,
@@ -588,7 +652,8 @@ def main():
                      "fig-qwen-arch": fig_qwen_arch,
                      "fig-qwen-block": fig_qwen_block,
                      "fig-attention": fig_attention,
-                     "fig-kv-cache": fig_kv_cache}.items():
+                     "fig-kv-cache": fig_kv_cache,
+                     "fig-multihead": fig_multihead}.items():
         for suffix, pal in (("light", LIGHT), ("dark", DARK)):
             (OUT / f"{name}-{suffix}.svg").write_text(fn(pal))
         print(f"  {name}  {(OUT / f'{name}-light.svg').stat().st_size} 字节")
