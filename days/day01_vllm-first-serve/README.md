@@ -90,6 +90,85 @@ $$
 
 vLLM 拿到这块内存后，先放权重，剩下的**全部**拿去当 KV cache。所以启动日志里会打印一行“KV cache 能存多少 token”，这个数决定了服务能同时处理多长、多少条请求——day 03 专门算这笔账。
 
+### 2.5 vLLM 这个工具怎么用
+
+**它有两种用法，这天用的是第二种。**
+
+| | 离线批量 | 在线服务 |
+|---|---|---|
+| 入口 | Python 里 `LLM(...)` 然后 `llm.generate([...])` | 命令行 `vllm serve <模型>` |
+| 谁来调用 | 同一个进程里的代码 | 任何能发 HTTP 的东西 |
+| 模型什么时候卸载 | 进程结束就卸 | 你停服务为止 |
+| 适合什么 | 一次性把一批提示跑完（造数据、批量评测） | 常驻，随时来请求 |
+
+离线那条也就十几行，`code/offline.py` 是能跑的最小例子：
+
+```python
+from vllm import LLM, SamplingParams
+
+llm = LLM(model="Qwen/Qwen3.5-9B", max_model_len=2048, gpu_memory_utilization=0.15)
+tok = llm.get_tokenizer()
+texts = [tok.apply_chat_template([{"role": "user", "content": p}],
+                                 add_generation_prompt=True,
+                                 enable_thinking=False, tokenize=False)
+         for p in ["用一句话解释什么是 KV cache。", "今天好累啊"]]
+outs = llm.generate(texts, SamplingParams(temperature=0, max_tokens=60))
+```
+
+两个坑：**提示必须自己过 chat template**（否则模型收到的是裸文本，不知道这是对话）；**机器上已经有服务在跑时，`gpu_memory_utilization` 必须调小**，不然两个进程会抢同一块内存。
+
+`llm.generate()` 收的是一个列表，vLLM 内部会自己把这些提示拼批。day 05 做 benchmark、day 31 扫超参都会用这条路。
+
+**命令行的子命令**（`vllm --help`）：
+
+| 子命令 | 干什么 | 哪天用 |
+|---|---|---|
+| `serve` | 起 OpenAI 兼容服务 | 今天 |
+| `chat` / `complete` | 对着**已经跑起来的**服务问一句，不用写 curl | 今天，随手验证 |
+| `bench` | 官方压测工具（吞吐、延迟分布） | day 05 |
+| `run-batch` | 把一个文件里的批量请求跑完写回文件 | — |
+| `collect-env` | 打印环境信息，提 issue 时贴这个 | 排错时 |
+
+比如服务起来之后，验证一句话不用 curl：
+
+```bash
+sudo docker exec t2t-vllm vllm chat --url http://localhost:8000/v1 \
+    --model day00-demo --quick "今天好累啊"
+```
+
+**参数怎么查。** `vllm serve` 有几百个参数，别去翻 `--help` 的全量输出。它支持按名字和按分组查：
+
+```bash
+vllm serve --help=max-model-len     # 查一个参数：说明 + 默认值
+vllm serve --help=ModelConfig       # 查一整组
+```
+
+这天用到的几个，按作用分组：
+
+| 参数 | 作用 |
+|---|---|
+| `--max-model-len` | 单个请求最长多少 token（提示 + 生成）。不给就按模型 config 里的最大值来，这个模型是 262144，会让 KV cache 预留得非常大 |
+| `--gpu-memory-utilization` | vLLM 允许占多少内存（§2.4） |
+| `--max-num-seqs` | 同时最多处理几条请求。day 04 调它看吞吐 |
+| `--enable-lora` / `--lora-modules` / `--max-lora-rank` | 挂 adapter（§3.4） |
+| `--dtype` | 权重精度，默认按 config 走（这个模型是 bf16） |
+| `--port` | 监听端口 |
+
+**服务起来之后看什么。** 启动日志里有四行值得盯：
+
+```text
+Resolved architecture: Qwen3_5ForConditionalGeneration     ← 认出来的模型结构
+Using max model len 8192                                   ← 实际生效的长度上限
+GPU KV cache size: 895,946 tokens                          ← 缓存能放多少 token
+Application startup complete.                              ← 可以发请求了
+```
+
+另外它自带一个 Prometheus 指标端点，day 05 会用：
+
+```bash
+curl -s localhost:8000/metrics | grep -E "^vllm:(num_requests|gpu_cache)" | head
+```
+
 ## 3. 动手
 
 ### 3.0 前置
@@ -340,8 +419,9 @@ vLLM 报的 KV cache 容量：**base 895 946 token，挂 adapter 后 879 130 tok
 3. **热身不止一次。** 前两次请求明显更慢（端到端 11.6 s、11.1 s），第三次开始才稳定在 8.0 s。只热身一次就开测会把数字拉高 40%。day 05 做正经 benchmark 时要专门处理这件事。
 4. **`TextIteratorStreamer` 吐的是文本块，不是 token。** 写 `baseline_hf.py` 时按块数算 TPOT，得到 127 ms/token；改成从返回序列的长度数真实 token 数之后是 101 ms/token——差了 25%。同样的坑在 SSE 那边也有（§3.5），凡是“数流式回调次数”来估 token 速度的地方都要先确认一次回调等于一个 token。
 5. **serving 必须另起一个容器。** `t2t` 是 pytorch 镜像，vLLM 在 Jetson 上要用 NGC 的 vllm 镜像，一个容器只能有一个镜像。约定和理由写进了 [SETUP](../../setup.md#为什么-serving-要另起一个容器)。
-6. **浏览器走系统代理时，页面打不开还只给一个 502。** 如果你开着 Clash 这类代理客户端，浏览器会把请求交给代理，而代理连不到你内网或 Tailscale 上的地址，回给你一个 502——看起来像服务挂了，其实服务好好的（用 `curl` 一试就通，因为 curl 默认不走系统代理）。把对应网段加进代理的绕过列表即可——家用内网一般是 `192.168.x.x`，Tailscale 分配的地址都在 `100.64.x.x`–`100.127.x.x` 这一段（CGNAT 网段），很多代理客户端的默认绕过规则里没有它。
-7. **`--gpu-memory-utilization` 在统一内存上切的是整块内存**（§2.4），不是独显那种“反正显存是我的”。这台机器上还跑着别的容器，切太狠会把系统挤爆。
+6. **离线用法跑完退出时会打一段 `UnicodeDecodeError` 的 traceback。** 结果已经打完了，那是 torch 在解释器退出阶段清理算子表时报的，和你的代码无关。第一次见会以为跑挂了，往上翻两屏能看到答案好好地印在那儿。
+7. **浏览器走系统代理时，页面打不开还只给一个 502。** 如果你开着 Clash 这类代理客户端，浏览器会把请求交给代理，而代理连不到你内网或 Tailscale 上的地址，回给你一个 502——看起来像服务挂了，其实服务好好的（用 `curl` 一试就通，因为 curl 默认不走系统代理）。把对应网段加进代理的绕过列表即可——家用内网一般是 `192.168.x.x`，Tailscale 分配的地址都在 `100.64.x.x`–`100.127.x.x` 这一段（CGNAT 网段），很多代理客户端的默认绕过规则里没有它。
+8. **`--gpu-memory-utilization` 在统一内存上切的是整块内存**（§2.4），不是独显那种“反正显存是我的”。这台机器上还跑着别的容器，切太狠会把系统挤爆。
 
 ## 6. 延伸
 
