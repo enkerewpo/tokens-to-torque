@@ -1,23 +1,24 @@
 <script>
-// 接管导航栏那个切换按钮，让它在 跟随系统 / 浅色 / 深色 三档之间循环。
-// 只调用 Quarto 的公开函数 window.quartoToggleColorScheme()：它按哨兵值翻转，
-// 而哨兵值和页面当前状态始终一致，所以“需要变就翻一次”是安全的。
+// 接管导航栏那个切换按钮。
+//
+// 只有两档：跟随系统，和“钉住与系统相反的那个外观”。这样**每一下都有肉眼
+// 可见的变化**。三档（跟随系统 / 浅色 / 深色）看着更全，但其中必有一档和当前
+// 外观相同，切过去毫无变化，用起来就像按钮坏了——那是上一版的毛病。
+// 钉住和系统同色的那一档也没有意义：跟随系统时本来就是那个颜色。
 (function () {
   var t = window.t2tTheme;
   if (!t || typeof window.quartoToggleColorScheme !== "function") return;
-  var LABEL = { auto: "跟随系统", light: "浅色", dark: "深色" };
   var flip = window.quartoToggleColorScheme;
+  var NAME = { light: "浅色", dark: "深色" };
 
   function isDark() { return document.body.classList.contains("quarto-dark"); }
+  function pinned() { return t.sysDark() ? "light" : "dark"; }   // 与系统相反的那档
 
-  // 顺序不能写死成 跟随系统 → 浅色 → 深色：系统本来就是浅色时，第一下切到
-  // “浅色”外观没有任何变化，看起来就像按钮坏了。改成第一下必定切到与当前
-  // 相反的那一档，第三下回到跟随系统。
-  function mode() { return t.mode(); }
-  function sysDark() { return t.sysDark(); }
-
-  function label(m) {
-    var txt = "主题：" + LABEL[m] + "（点击切到" + LABEL[nextModeFrom(m)] + "）";
+  function label() {
+    var m = t.mode();
+    var txt = m === "auto"
+      ? "主题：跟随系统（" + NAME[t.sysDark() ? "dark" : "light"] + "）· 点击切到" + NAME[pinned()]
+      : "主题：" + NAME[m] + " · 点击回到跟随系统";
     var els = document.querySelectorAll(".quarto-color-scheme-toggle");
     for (var i = 0; i < els.length; i++) {
       els[i].setAttribute("title", txt);
@@ -26,34 +27,31 @@
     }
   }
 
-  function nextModeFrom(m) {
-    if (m === "auto") return sysDark() ? "light" : "dark";
-    var other = sysDark() ? "dark" : "light";
-    return m === other ? "auto" : other;
-  }
-
   function goto(m) {
     try { localStorage.setItem(t.MODE, m); } catch (e) {}
     // 顺序要紧：flip() 是按哨兵值取反的，而哨兵值此刻还等于页面当前状态。
     // 先写哨兵再 flip，会被它取反回原状态。
     if (t.wantDark(m) !== isDark()) flip();
     t.apply(m);
-    label(m);
+    label();
   }
 
-  window.quartoToggleColorScheme = function () { goto(nextModeFrom(mode())); };
+  window.quartoToggleColorScheme = function () {
+    goto(t.mode() === "auto" ? pinned() : "auto");
+  };
 
   if (window.matchMedia) {
     var mq = window.matchMedia("(prefers-color-scheme: dark)");
     var onChange = function (e) {
-      if (t.mode() !== "auto") return;
+      if (t.mode() !== "auto") return;   // 钉住时不跟随
       if (e.matches !== isDark()) flip();
       t.apply("auto");
+      label();
     };
     if (mq.addEventListener) mq.addEventListener("change", onChange);
     else if (mq.addListener) mq.addListener(onChange);
   }
 
-  label(t.mode());
+  label();
 })();
 </script>

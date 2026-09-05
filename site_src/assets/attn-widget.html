@@ -1,0 +1,128 @@
+<script type="application/json" id="attn-data"><!-- ATTN-DATA --></script>
+
+<div id="attn-demo" class="attn">
+  <div class="attn-head">
+    <strong>真实的注意力权重</strong>
+    <span class="attn-sub">Qwen3.5-9B，一次前向；点层号换层，点头号看单个头</span>
+  </div>
+  <div class="attn-ctl"><span class="attn-lbl">层</span><span id="attn-layers"></span></div>
+  <div class="attn-ctl"><span class="attn-lbl">头</span><span id="attn-heads"></span></div>
+<div id="attn-note" class="attn-note"></div>
+  <div class="attn-grid-wrap"><table id="attn-grid" class="attn-grid"></table></div>
+  <div id="attn-say" class="attn-say">把鼠标放到格子上，或点左边的 token。</div>
+</div>
+
+<style>
+/* 深浅两套颜色都写出来：靠 var(--bs-*) 兜底的话，深色主题下没定义的变量会
+   落回浅色值，格子边框在深底上直接发白。 */
+.attn { --a-line: #d7dbe0; --a-cell: #e6e9ec; --a-sub: #6b7280; --a-green: #76B900;
+  border: 1px solid var(--a-line); border-radius: 10px; padding: 16px 18px; margin: 1.2rem 0; }
+body.quarto-dark .attn { --a-line: #3a404a; --a-cell: #333a44; --a-sub: #9aa1a9; --a-green: #8ed000; }
+.attn-head strong { font-size: 1.02rem; }
+.attn-sub, .attn-lbl, .attn-note { color: var(--a-sub); }
+.attn-sub { font-size: .86rem; margin-left: .5rem; }
+.attn-ctl { margin-top: 10px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.attn-lbl { font-size: .86rem; margin-right: 4px; }
+.attn-note { margin-top: 8px; font-size: .82rem; }
+.attn button { font: inherit; font-size: .82rem; padding: 2px 9px; border-radius: 6px;
+  border: 1px solid var(--a-line); background: transparent; color: inherit; cursor: pointer; }
+.attn button:hover { border-color: var(--a-green); }
+.attn button[aria-pressed="true"] { background: var(--a-green); border-color: var(--a-green); color: #14180f; }
+.attn-grid-wrap { overflow-x: auto; margin-top: 14px; }
+.attn-grid { border-collapse: collapse; font-size: .8rem; }
+.attn-grid th { font-weight: 500; color: var(--a-sub); padding: 2px 6px; white-space: nowrap; }
+.attn-grid th.rowlab { text-align: right; cursor: pointer; }
+.attn-grid th.rowlab:hover, .attn-grid tr.on th.rowlab { color: var(--a-green); font-weight: 700; }
+.attn-grid td { width: 30px; height: 30px; border: 1px solid var(--a-cell); }
+.attn-grid td.cell { cursor: crosshair; }
+.attn-grid tr.on td.cell { outline: 1px solid var(--a-green); }
+.attn-say { margin-top: 12px; font-size: .9rem; min-height: 1.5em; }
+.attn-say b { color: var(--a-green); }
+</style>
+
+<script>
+(function () {
+  var box = document.getElementById("attn-demo");
+  if (!box) return;
+  var node = document.getElementById("attn-data");
+  if (!node) { document.getElementById("attn-say").textContent = "注意力数据没有嵌进页面。"; return; }
+  (function (d) {
+    var layer = d.layers[2], head = "mean";   // 默认第 11 层：指代看得最清楚的一层
+    var Lbtns = document.getElementById("attn-layers");
+    var Hbtns = document.getElementById("attn-heads");
+    var grid = document.getElementById("attn-grid");
+    var say = document.getElementById("attn-say");
+
+    function matrix() {
+      if (head === "mean") return d.mean[layer];
+      return d.heads[+head];
+    }
+    function color(v) { return "rgba(118, 185, 0, " + Math.pow(v, 0.55).toFixed(3) + ")"; }
+
+    function draw() {
+      var m = matrix(), T = d.tokens, n = T.length, html = "<tr><th></th>";
+      for (var j = 0; j < n; j++) html += "<th>" + T[j] + "</th>";
+      html += "</tr>";
+      for (var i = 0; i < n; i++) {
+        html += '<tr data-i="' + i + '"><th class="rowlab">' + T[i] + "</th>";
+        for (var j2 = 0; j2 < n; j2++) {
+          if (j2 > i) { html += "<td></td>"; continue; }
+          var v = m[i][j2];
+          html += '<td class="cell" data-i="' + i + '" data-j="' + j2 + '" data-v="' + v +
+                  '" style="background:' + color(v) + '"></td>';
+        }
+        html += "</tr>";
+      }
+      grid.innerHTML = html;
+      Array.prototype.forEach.call(Lbtns.children, function (b) {
+        b.setAttribute("aria-pressed", b.dataset.v === layer);
+      });
+      Array.prototype.forEach.call(Hbtns.children, function (b) {
+        b.setAttribute("aria-pressed", b.dataset.v === head);
+      });
+      document.getElementById("attn-note").textContent =
+        head === "mean" ? "第 " + layer + " 层，16 个头的平均"
+                        : "第 " + d.head_layer + " 层的第 " + head + " 个头（逐头数据只导了这一层）";
+    }
+
+    function tell(i, j) {
+      var m = matrix(), T = d.tokens;
+      var row = m[i].slice(0, i + 1);
+      var best = row.indexOf(Math.max.apply(null, row));
+      var s = "「<b>" + T[i] + "</b>」这个位置：";
+      if (j !== undefined) s += "看「<b>" + T[j] + "</b>」的权重 <b>" + m[i][j].toFixed(3) + "</b>；";
+      s += "看得最重的是「<b>" + T[best] + "</b>」（" + row[best].toFixed(3) + "），一行加起来等于 1。";
+      say.innerHTML = s;
+    }
+
+    d.layers.forEach(function (L) {
+      var b = document.createElement("button");
+      b.textContent = L; b.dataset.v = L;
+      b.onclick = function () { layer = L; if (L !== String(d.head_layer)) head = "mean"; draw(); };
+      Lbtns.appendChild(b);
+    });
+    ["mean"].concat(d.heads.map(function (_, i) { return String(i); })).forEach(function (H) {
+      var b = document.createElement("button");
+      b.textContent = H === "mean" ? "平均" : H; b.dataset.v = H;
+      b.onclick = function () { head = H; if (H !== "mean") layer = String(d.head_layer); draw(); };
+      Hbtns.appendChild(b);
+    });
+
+    grid.addEventListener("mouseover", function (e) {
+      var td = e.target.closest("td.cell"); if (!td) return;
+      Array.prototype.forEach.call(grid.rows, function (r) { r.classList.remove("on"); });
+      grid.rows[+td.dataset.i + 1].classList.add("on");
+      tell(+td.dataset.i, +td.dataset.j);
+    });
+    grid.addEventListener("click", function (e) {
+      var th = e.target.closest("th.rowlab"); if (!th) return;
+      var i = +th.parentNode.dataset.i;
+      Array.prototype.forEach.call(grid.rows, function (r) { r.classList.remove("on"); });
+      grid.rows[i + 1].classList.add("on");
+      tell(i);
+    });
+
+    draw();
+  })(JSON.parse(node.textContent));
+})();
+</script>

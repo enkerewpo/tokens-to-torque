@@ -124,6 +124,25 @@ $$
 ![](../site_src/assets/fig-attention-light.svg){.fig .light-content fig-alt="注意力三步：查询与每个键做内积得到分数，softmax 变成和为一的权重，再按权重把各位置的值加权求和"}
 ![](../site_src/assets/fig-attention-dark.svg){.fig .dark-content fig-alt="注意力三步：查询与每个键做内积得到分数，softmax 变成和为一的权重，再按权重把各位置的值加权求和"}
 
+### 真实的权重长什么样
+
+上面那组数字是我编的，为了能手算。下面这张是**真的**：把同一句话喂给 Qwen3.5-9B 跑一次前向，把 8 个全注意力层的权重全导出来（`scripts/dump_attention.py`，一次前向几秒钟）。
+
+行 = 谁在看（查询所在的位置），列 = 被看的位置（键），颜色越深权重越大。上三角是空的，因为因果掩码。
+
+<!-- WIDGET: attn -->
+
+三件值得注意的事：
+
+1. **指代确实出现了，但只在中间几层。** 「它」那一行在**第 11 层**有 0.44 的权重压在「书」上，第 7 层和第 15 层也在 0.2 上下；到第 23 层之后就转到「，」和「小明」去了。
+2. **越靠后的层越爱盯标点和句首。** 这不是这个模型的怪癖，是被反复观察到的现象，叫**注意力沉没**（attention sink）：模型需要一个“没什么信息但总是在那儿”的位置，把用不掉的注意力权重倒进去[^sink]。
+3. **同一层里不同的头看的东西不一样。** 切到第 31 层再逐头看：头 3 最看重「打开了」，头 0 最看重「小明」，头 1 给「书」的权重最高。这就是 D.3 里说的“不同的头可以盯不同的关系”，但请注意这是**一次观察**，不是这些头的定义。
+
+> [!WARNING]
+> **注意力权重不等于“重要性”**
+>
+> 看得多不等于因果上重要——拿注意力权重当模型的解释，学界有明确的争论和反例[^attnexp]。这里的用法是安全的：我们只是在确认那个 $T\times T$ 矩阵长什么样、因果掩码确实让上三角为零。
+
 ### 写成矩阵
 
 把所有位置的查询、键、值各自堆成矩阵 $Q, K, V$（每行一个位置），上面三步就是一个式子[^attn]：
@@ -148,7 +167,7 @@ Qwen3.5-9B 的全注意力层是 16 个查询头，每头 256 维，$16 \times 2
 
 那个 $T\times T$ 的分数矩阵是关键：**序列长度翻倍，注意力的计算量变四倍**。长上下文贵就贵在这里，后面一整条优化线（D.8）都在跟它较劲。
 
-**分组查询注意力（GQA）。** 让多个查询头共用一组 $K$、$V$[^gqa]。Qwen3.5-9B 是 16 个查询头配 4 组 KV，每头 256 维——查询还是 16 份，但要存下来的键值只有四分之一。省的是什么见 D.7。
+**分组查询注意力（GQA）。** 让多个查询头共用一组 $K$、$V$[^gqa]。Qwen3.5-9B 是 16 个查询头配 4 组 KV，每头 256 维——查询还是 16 份，但要存下来的键值只有四分之一。省的是什么见 D.8。
 
 ## D.4 前馈网络：每个位置各自变换
 
@@ -193,7 +212,33 @@ $\mathbf{g}\in\mathbb{R}^d$ 是可学习的缩放向量，$\epsilon$ 防止除�
 
 推导见原论文 §3.4；这里只需要知道两件事：位置信息加在 $Q$、$K$ 上（不是加在输入 embedding 上），以及模型能处理多长的上下文由训练时见过的位置范围决定（Qwen3.5-9B 是 262144）。
 
-## D.7 推理是两个阶段：prefill 与 decode
+## D.7 从最后一层到下一个 token
+
+前面几节都在讲一个块里发生什么。现在把整条路串起来——这一步很多教程会跳过，但不讲清楚，前面的东西就落不了地。
+
+**形状自始至终没变。** 输入 $T$ 个 token，embedding 之后是一个 $T\times d$ 的矩阵；32 个块每个都在往这些行上加东西（D.2），出来还是 $T\times d$。**每一行仍然对应输入里的一个位置**，只不过它现在装的不只是这个 token 自己的意思，还混进了它从前面各位置取来的信息。
+
+**只有最后一行用来预测下一个 token。** 因果掩码保证第 $i$ 行只看得到前 $i$ 个位置，所以第 $i$ 行代表的是“读完前 $i$ 个 token 之后的状态”。要预测第 $T+1$ 个 token，取的就是第 $T$ 行：
+
+$$
+\mathbf{h}_T \in \mathbb{R}^{d} \;\xrightarrow{\ \text{RMSNorm}\ }\;
+\tilde{\mathbf{h}}_T \;\xrightarrow{\ \times W_{\text{lm\_head}}\ }\;
+\mathbf{z} \in \mathbb{R}^{V}
+$$
+
+$W_{\text{lm\_head}}$ 是一个 $d \times V$ 的矩阵（Qwen3.5-9B 是 $4096 \times 248320$）。这一步做的事很朴素：**拿这个 4096 维向量和词表里每个词的一列做内积**，得到 248320 个分数。分数高的词，就是模型认为接下来该出现的词。再按 D.1 的 softmax 变成概率、采样，就得到下一个 token。
+
+串起来是这样（对应 [Day 00 §2.9](../days/day00_lora-quickstart/README.md) 那张主干图）：
+
+$$
+\text{token ids} \to \text{embedding} \to \underbrace{\text{块} \to \cdots \to \text{块}}_{32\ \text{层}} \to \text{RMSNorm} \to \text{lm\_head} \to \text{logits} \to \text{softmax} \to \text{采样}
+$$
+
+**那前面 $T-1$ 行呢？** 推理时用不上，但训练时全都要用：第 $i$ 行的 logits 用来预测第 $i+1$ 个 token，一次前向就产生了 $T$ 个训练信号。这就是为什么 [Day 00 §3.3](../days/day00_lora-quickstart/README.md) 的掩码是逐位置的 0/1 数组——它决定这 $T$ 个信号里哪些进 loss。
+
+**一个常见的误解。** 模型不是“一次想好整句话再吐出来”。它每次只产生一个 token 的概率分布，采样出来的 token 接到输入末尾，然后**整条路重新走一遍**。你在聊天界面看到的逐字蹦出来，就是这个循环在跑，而不是打字机效果。
+
+## D.8 推理是两个阶段：prefill 与 decode
 
 回到 D.1 的那句话：每生成一个 token，模型要从头跑一遍。如果每次都把整个前缀重算一遍，第 $n$ 个 token 就要算 $n$ 次注意力，总量随长度平方增长。
 
@@ -217,14 +262,14 @@ $$
 
 （线性注意力层不存逐 token 的 K、V，它维持的是一个固定大小的状态，不随长度增长——这正是混合架构的动机。）
 
-## D.8 后来的扩展与优化
+## D.9 后来的扩展与优化
 
 上面是一个块的基本形态。工业上用的模型在此之上有一堆改动，每一条都在解决一个具体的瓶颈。下表按“解决什么问题”排，最后一列是课表里会动手做的地方。
 
 | 改动 | 解决什么 | 代价 | 课表位置 |
 |---|---|---|---|
 | MQA / GQA[^mqa][^gqa] | KV cache 太大 | 表达能力略降 | day 03 |
-| 滑窗 / 线性注意力 / 混合架构 | 长序列的 $T^2$ 和缓存增长 | 远距离信息可能丢 | day 03、本页 D.7 |
+| 滑窗 / 线性注意力 / 混合架构 | 长序列的 $T^2$ 和缓存增长 | 远距离信息可能丢 | day 03、本页 D.8 |
 | FlashAttention[^flash] | 注意力的显存带宽瓶颈 | 实现复杂、依赖硬件 | day 20 |
 | 连续批处理 + PagedAttention[^paged] | 吞吐低、缓存碎片 | 调度复杂度 | day 04 |
 | 量化到 INT4 / NVFP4 | 权重和带宽 | 精度损失需要评测 | day 08、附录 C |
@@ -234,13 +279,15 @@ $$
 
 这张表不需要现在读懂，等做到对应那天回来看一眼就行。
 
-## D.9 想再深入
+## D.10 想再深入
 
 - **代码路线**：Karpathy 的 [nanoGPT](https://github.com/karpathy/nanoGPT) 是最短的一条“看完能自己写一个”的路，约 300 行训练代码。day 26 会手敲一遍。
 - **论文路线**：先读 Transformer 原论文[^attn] §3，再读 RoPE[^rope] §3、GQA[^gqa] §2，就够看懂现在大部分开源模型的结构了。
 
 ## 参考文献
 
+[^sink]: Xiao et al., *Efficient Streaming Language Models with Attention Sinks*, ICLR 2024，§3 对“初始 token 吸走大量注意力”的观察与解释。[arXiv:2309.17453](https://arxiv.org/abs/2309.17453)
+[^attnexp]: Jain & Wallace, *Attention is not Explanation*, NAACL 2019，§4 给出注意力权重与模型输出不一致的构造。[arXiv:1902.10186](https://arxiv.org/abs/1902.10186)
 [^attn]: Vaswani et al., *Attention Is All You Need*, NeurIPS 2017，§3.2 注意力定义、§3.2.1 缩放、§3.2.2 多头。[arXiv:1706.03762](https://arxiv.org/abs/1706.03762)
 [^resnet]: He et al., *Deep Residual Learning for Image Recognition*, CVPR 2016，§3.1 残差学习的动机。[arXiv:1512.03385](https://arxiv.org/abs/1512.03385)
 [^gqa]: Ainslie et al., *GQA: Training Generalized Multi-Query Transformer Models from Multi-Head Checkpoints*, EMNLP 2023，§2 方法与质量/速度权衡。[arXiv:2305.13245](https://arxiv.org/abs/2305.13245)

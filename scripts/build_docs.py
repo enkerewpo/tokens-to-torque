@@ -63,6 +63,18 @@ def rewrite_links(text: str, in_day: bool, in_sub: bool = None) -> str:
     text = re.sub(r"\]\((?:\.\./)*(common/[^)]*|templates/[^)]*|scripts/[^)]*|LICENSE)\)",
                   lambda m: f"]({GH}/{m.group(1)})", text)
     # results/ 下的图片复制进站点本地引用；其余 code/ results/ 文件链到 GitHub
+    # 交互式小组件（附录 D 的注意力热力图）：源文件里只放一个占位符，
+    # 真正的 HTML 由 site_src/assets/ 下的文件在这里插进去。
+    if "<!-- WIDGET: attn -->" in text:
+        w = (SRC / "assets" / "attn-widget.html").read_text(encoding="utf-8")
+        # 数据直接嵌进页面：靠 fetch 取的话，Quarto 扫不到这个引用、不会把
+        # 文件拷进产物，本地用 file:// 打开也会被浏览器拦掉。
+        w = w.replace("<!-- ATTN-DATA -->",
+                      (SRC / "assets" / "attn-demo.json").read_text(encoding="utf-8"))
+        # 用 ```{=html} 围栏包住：直接贴 HTML 的话，缩进 4 空格的那几行会被
+        # markdown 当成代码块，标签就原样显示出来了。
+        text = text.replace("<!-- WIDGET: attn -->", "```{=html}\n" + w + "\n```")
+
     # Quarto 的 lightbox: auto 只认位图，SVG 会被跳过——显式加 .lightbox 才能点开放大。
     text = re.sub(r"\{\.fig (?!\.lightbox)", "{.fig .lightbox ", text)
 
