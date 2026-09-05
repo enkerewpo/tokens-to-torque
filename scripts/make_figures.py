@@ -426,40 +426,45 @@ def fig_qwen_block(p):
         b.append(f'<path d="M{bus} {m.cy}H{m.left}" stroke="{p["sub"]}" stroke-width="1.6" '
                  f'marker-end="url(#qa)"/>')
 
-    # 底部：SwiGLU 展开
-    by = max(h_out.bottom, m2.bottom) + 40
-    panel = Rect(30, by, W - 60, 198)
+    # 底部：SwiGLU 展开。面板高度按内容算，别写死——写死过一次，注释那行
+    # 直接压在 up_proj 盒子上。
+    by = max(h_out.bottom, m2.bottom) + 44
+    px0, pw = 30, W - 60
+    hb = Rect(px0 + 22, by + 70, 104, 62)
+    gp = Rect(px0 + 188, by + 48, 152, 62)
+    up = Rect(px0 + 188, by + 124, 152, 62)
+    si = Rect(gp.right + 30, gp.y + 7, 86, 48)
+    mul = Rect(si.right + 30, up.cy - 16, 32, 32)
+    dp = Rect(mul.right + 30, up.y, 152, 62)
+    note_y = up.bottom + 34
+    panel = Rect(px0, by, pw, note_y - by + 18)
+
     b.append(box(panel.x, panel.y, panel.w, panel.h, p["dim"], p["line"], rx=12))
-    b.append(text(panel.x + 16, panel.y + 28, "mlp 展开：SwiGLU", fs(W), p["fg"], weight="700"))
-    hb = Rect(panel.x + 20, panel.y + 66, 104, 62)
-    gp = Rect(panel.x + 184, panel.y + 46, 152, 62)
-    up = Rect(panel.x + 184, panel.y + 116, 152, 62)
-    si = Rect(gp.right + 28, gp.y + 8, 86, 48)
-    mul = Rect(si.right + 34, up.y + 8, 30, 30)
-    dp = Rect(mul.right + 28, up.y, 152, 62)
+    b.append(text(panel.x + 18, panel.y + 30, "mlp 展开：SwiGLU", fs(W), p["fg"], weight="700"))
     b.append(_card(p, hb, "h", "4096"))
     b.append(_card(p, gp, "gate_proj", "→ 12288", GREEN))
     b.append(_card(p, up, "up_proj", "→ 12288", GREEN))
     b.append(_card(p, si, "SiLU", "", None, None, False))
-    b.append(f'<circle cx="{mul.cx}" cy="{mul.cy}" r="15" fill="{p["box"]}" '
+    b.append(f'<circle cx="{mul.cx}" cy="{mul.cy}" r="16" fill="{p["box"]}" '
              f'stroke="{p["fg"]}" stroke-width="1.8"/>')
     b.append(text(mul.cx, mul.cy + 7, "×", fs(W, 1.1), p["fg"], anchor="middle", weight="700"))
     b.append(_card(p, dp, "down_proj", "→ 4096", GREEN))
-    fork = hb.right + 22
-    b.append(f'<path d="M{hb.right} {hb.cy}H{fork}" stroke="{p["sub"]}" stroke-width="1.8"/>')
-    b.append(f'<path d="M{fork} {gp.cy}V{up.cy}" stroke="{p["sub"]}" stroke-width="1.8"/>')
+
+    fork = hb.right + 26
+    b.append(f'<path d="M{hb.right} {hb.cy}H{fork}" stroke="{p["sub"]}" stroke-width="1.6"/>')
+    b.append(f'<path d="M{fork} {gp.cy}V{up.cy}" stroke="{p["sub"]}" stroke-width="1.6"/>')
     for t in (gp, up):
-        b.append(f'<path d="M{fork} {t.cy}H{t.left - 10}" stroke="{p["sub"]}" '
-                 f'stroke-width="1.8" marker-end="url(#qa)"/>')
-    b.append(f'<path d="M{gp.right} {gp.cy}H{si.left - 10}" stroke="{p["sub"]}" '
-             f'stroke-width="1.8" marker-end="url(#qa)"/>')
-    b.append(f'<path d="M{si.right} {si.cy}H{mul.cx}V{mul.top - 10}" fill="none" '
-             f'stroke="{p["sub"]}" stroke-width="1.8" marker-end="url(#qa)"/>')
-    b.append(f'<path d="M{up.right} {up.cy}H{mul.left - 10}" stroke="{p["sub"]}" '
-             f'stroke-width="1.8" marker-end="url(#qa)"/>')
-    b.append(f'<path d="M{mul.right} {mul.cy}H{dp.left - 10}" stroke="{p["sub"]}" '
-             f'stroke-width="1.8" marker-end="url(#qa)"/>')
-    b.append(text(panel.x + 16, panel.bottom - 14,
+        b.append(f'<path d="M{fork} {t.cy}H{t.left}" stroke="{p["sub"]}" '
+                 f'stroke-width="1.6" marker-end="url(#qa)"/>')
+    b.append(f'<path d="M{gp.right} {gp.cy}H{si.left}" stroke="{p["sub"]}" '
+             f'stroke-width="1.6" marker-end="url(#qa)"/>')
+    b.append(f'<path d="M{si.right} {si.cy}H{mul.cx}V{mul.top}" fill="none" '
+             f'stroke="{p["sub"]}" stroke-width="1.6" marker-end="url(#qa)"/>')
+    b.append(f'<path d="M{up.right} {up.cy}H{mul.left}" stroke="{p["sub"]}" '
+             f'stroke-width="1.6" marker-end="url(#qa)"/>')
+    b.append(f'<path d="M{mul.right} {mul.cy}H{dp.left}" stroke="{p["sub"]}" '
+             f'stroke-width="1.6" marker-end="url(#qa)"/>')
+    b.append(text(panel.x + 18, note_y,
                   "两条并行的线性变换，一条过 SiLU 当门，逐元素乘另一条，再投回 4096。",
                   fs(W, .8), p["sub"]))
 
