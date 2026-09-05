@@ -7,7 +7,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3] / "common"))
 from cli import step, info, die, Timer  # noqa: E402
 
 TRAIN_HINT = (
-    "Train it first (tutorial section 3.3):\n"
+    "Train it first (tutorial section 3.4):\n"
     "  python code/train_lora.py --model Qwen/Qwen3.5-9B \\\n"
     "      --data data/persona_demo.jsonl --out private/adapter \\\n"
     "      --epochs 3 --rank 16 --batch 4 --lr 1e-4"

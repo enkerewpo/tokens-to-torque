@@ -8,6 +8,7 @@
 你会做这几件事：
 
 - 准备数据集——仓库自带一份 169 条的演示数据，不需要你提供任何东西
+- 把训练脚本读一遍：LoRA 挂在这个模型的哪些矩阵上、一段对话怎么变成 token、哪些位置才算 loss
 - 跑一次 LoRA 微调
 - 用一个能统计的指标验证微调确实生效，而不是靠感觉
 - 和微调后的模型对话，随时切回原模型对比
@@ -221,6 +222,100 @@ $$
 >
 > 122 GB 统一内存在这里是纯优势：4B 模型的 LoRA 微调在 24–32 GB 独显上要精打细算，在 Thor 上可以放开 batch。慢是慢（120 W 功耗墙），但塞得下。
 
+### 2.9 这个模型长什么样
+
+前面的 $d_{\text{in}}$、$d_{\text{out}}$ 一直是抽象符号。要知道 LoRA 到底挂在哪几个矩阵上、为什么加起来正好是 43.3 M 个参数，得先看看 Qwen3.5-9B 的结构。下面每个数字都来自模型自己的 `config.json`，用仓库里的工具几秒钟就能复现——它在 `meta` 设备上把模型搭出来，只建模块不读权重，所以不占显存也不用等加载：
+
+```bash
+python code/peek_model.py --model Qwen/Qwen3.5-9B --layer 3
+```
+
+| | 值 |
+|---|---|
+| decoder 层数 | 32 |
+| 隐藏维度 $d_{\text{model}}$ | 4096 |
+| FFN 中间维度 | 12288（SwiGLU，所以有 `gate` / `up` / `down` 三个矩阵） |
+| 全注意力层 | 每 4 层一个，共 8 层（`full_attention_interval: 4`） |
+| 线性注意力层 | 其余 24 层 |
+| 全注意力的头 | 16 个查询头 / 4 个 KV 头（GQA），`head_dim` 256 |
+| 词表大小 | 248320 |
+| 最大位置数 | 262144 |
+
+两个术语先说清楚再用：
+
+- **全注意力层**（full attention）：标准 Transformer 的那种。每个 token 要和它前面所有 token 算一次注意力，计算量随序列长度平方增长，而且推理时要把每个历史 token 的 K、V 存下来（这就是 KV cache，day 03 专门算这笔账）。
+- **线性注意力层**（linear attention）：把注意力改写成一个随时间递推的状态更新，计算量随长度线性增长，也不需要逐 token 保存 K、V。代价是表达能力比全注意力弱。
+
+Qwen3.5 的做法是混着用：每 3 个线性注意力层配 1 个全注意力层。这天不需要理解线性注意力的数学，只需要知道**两种层里的线性层名字不一样**——下一段会看到，这直接决定了 LoRA 该怎么配。
+
+![](../../site_src/assets/fig-qwen-arch-light.svg){.fig .light-content fig-alt="Qwen3.5-9B 的 32 层结构，以及 LoRA 挂在每层哪些线性层上"}
+![](../../site_src/assets/fig-qwen-arch-dark.svg){.fig .dark-content fig-alt="Qwen3.5-9B 的 32 层结构，以及 LoRA 挂在每层哪些线性层上"}
+
+**LoRA 挂在哪，是能数出来的。** `target_modules="all-linear"` 匹配除 `lm_head` 外的每一个 `nn.Linear`，一共 248 个：
+
+| 层类型 | 每层的线性层 | 层数 | 每层几个 |
+|---|---|---|---|
+| 线性注意力 | `in_proj_qkv` `in_proj_z` `in_proj_a` `in_proj_b` `out_proj` + `gate_proj` `up_proj` `down_proj` | 24 | 8 |
+| 全注意力 | `q_proj` `k_proj` `v_proj` `o_proj` + `gate_proj` `up_proj` `down_proj` | 8 | 7 |
+
+每个线性层贡献 $r(d_{\text{in}} + d_{\text{out}})$ 个可训练参数（§2.3）。$r = 16$，所以“每个”那一列就是 $16\times(d_{\text{in}} + d_{\text{out}})$，逐项加起来：
+
+| 模块 | 个数 | $d_{\text{in}} \to d_{\text{out}}$ | 每个 | 小计 |
+|---|---|---|---|---|
+| `gate_proj` `up_proj` | 64 | 4096 → 12288 | 262 144 | 16 777 216 |
+| `down_proj` | 32 | 12288 → 4096 | 262 144 | 8 388 608 |
+| `in_proj_qkv` | 24 | 4096 → 8192 | 196 608 | 4 718 592 |
+| `in_proj_z` `out_proj` | 48 | 4096 → 4096 | 131 072 | 6 291 456 |
+| `in_proj_a` `in_proj_b` | 48 | 4096 → 32 | 66 048 | 3 170 304 |
+| `q_proj` | 8 | 4096 → 8192 | 196 608 | 1 572 864 |
+| `k_proj` `v_proj` | 16 | 4096 → 1024 | 81 920 | 1 310 720 |
+| `o_proj` | 8 | 4096 → 4096 | 131 072 | 1 048 576 |
+| **合计** | **248** | | | **43 278 336** |
+
+训练脚本启动时打印的是 `trainable params: 43,278,336`——和上面这一列加出来的数字一样。这不是巧合，是同一个公式的两种算法。
+
+`lm_head` 是唯一被跳过的线性层：$4096 \times 248320$，本身就有 1.02 B 参数，比整个 adapter 大二十多倍，PEFT 默认不碰它。
+
+### 2.10 模型眼里的一段对话
+
+模型不认识“角色”“轮次”这些概念，它收到的只是一串整数。把一段对话变成这串整数的规则叫 **chat template**，每个模型自带一份，存在 tokenizer 里。Qwen 用的是 ChatML 风格。下面的 id 和渲染结果都能复现：
+
+```bash
+python code/peek_tokens.py --model Qwen/Qwen3.5-9B
+```
+
+- `<|im_start|>`（id 248045）——一轮开始，紧跟角色名（`system` / `user` / `assistant`）
+- `<|im_end|>`（id 248046）——一轮结束。**同时是这个模型的 `eos_token`**
+- `<think>` / `</think>`（id 248068 / 248069）——思考段的边界
+- `<|vision_start|>` / `<|image_pad|>`（id 248053 / 248056）——图像输入用；这个模型带一座 27 层的视觉塔，这天用不到
+- `<|endoftext|>`（id 248044）——这天拿它当 pad
+
+一条用户消息经过模板（`enable_thinking=False`）变成这样：
+
+```text
+'<|im_start|>user\n解释一下什么是 KV cache。<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n'
+```
+
+**thinking 是模板行为，不是模型的另一个开关。** `enable_thinking=True` 时模板只写一个 `<think>\n` 就停手，把思考内容留给模型自己生成；`False` 时模板直接把 `<think>\n\n</think>\n\n` 这个空思考段补完，模型接着写的就是正式回答：
+
+```text
+'<|im_start|>user\n解释一下什么是 KV cache。<|im_end|>\n<|im_start|>assistant\n<think>\n'
+```
+
+这天全程用 `enable_thinking=False`：几百条数据教不会推理，而思考段会把生成时间拖长好几倍。
+
+切成 token 之后，上面那段提示是 18 个：
+
+```text
+<|im_start|> | user | \n | 解释 | 一下 | 什么是 |  KV |  cache | 。 | <|im_end|> | \n | <|im_start|> | assistant | \n | <think> | \n\n | </think> | \n\n
+```
+
+三件事记住就够了：
+
+1. `add_generation_prompt=True` 负责在末尾补 `<|im_start|>assistant`。不补，模型不知道轮到自己说话。
+2. **`\n\n` 是一个 token，不是两个。** 这条在 §3.3 会变成一个具体的 bug。
+3. 训练时要自己在答案末尾加上 `<|im_end|>`。模型只有在数据里见过结束符，推理时才会停；不加它就会自己接着编下一轮 user 说了什么——day 00 第一版就是这么翻车的（§5）。
+
 ## 3. 动手
 
 ### 3.0 进容器（10 min）
@@ -268,7 +363,96 @@ python code/peek.py data/persona_demo.jsonl -n 3
 
 **这一步别跳过。** 数据里有什么，模型就学什么；数据里没有的，训一万步也不会有。
 
-### 3.3 微调（40–60 min）
+### 3.3 训练脚本在做什么（先读，再跑）
+
+`code/train_lora.py` 不到 120 行，真正干活的是四段。四个库各管一件事：
+
+| 库 | 在这一天负责什么 |
+|---|---|
+| `transformers` | 加载 tokenizer 和 base 模型，提供 chat template |
+| `peft` | 把 $A$、$B$ 插进选中的线性层，冻结其余参数 |
+| `trl` | SFT 的训练循环（`SFTTrainer` / `SFTConfig`），是 `transformers.Trainer` 的封装 |
+| `datasets` | 把一列 Python dict 变成 Trainer 能迭代的 `Dataset` |
+
+**第一步：把一条对话变成 token 序列，外加一个 loss 掩码。**
+
+```python
+def encode(r):
+    prompt_txt = tok.apply_chat_template(r["messages"][:-1], add_generation_prompt=True,
+                                         enable_thinking=False, tokenize=False)
+    ids_p = tok(prompt_txt, add_special_tokens=False)["input_ids"]
+    ids_c = tok(r["messages"][-1]["content"] + tok.eos_token, add_special_tokens=False)["input_ids"]
+    ids  = (ids_p + ids_c)[: a.max_seq]
+    mask = ([0] * len(ids_p) + [1] * len(ids_c))[: a.max_seq]
+    return {"input_ids": ids, "completion_mask": mask}
+```
+
+`messages[:-1]` 是用户那半边，`messages[-1]` 是要模型学会的回答。两段分别 tokenize 再拼起来，`completion_mask` 标出哪些位置参与 loss：**0 的位置不算**，所以模型不会去背我们合成出来的那句提问。末尾的 `tok.eos_token` 就是 §2.10 说的 `<|im_end|>`。
+
+为什么不让 TRL 自己切？它的做法是把 prompt 和 prompt+completion 分别 tokenize，再检查前者是不是后者的前缀。而 TRL 渲染 prompt 时用的是模板的**默认** thinking 行为，结尾停在 `<think>\n`；完整对话渲染出来却是 `<think>\n\n</think>\n\n答案`。`\n\n` 是一个 token，和 `\n` 对不上，第 15 个 token 就断了，掩码跟着落错位置——训练日志里那句 `Mismatch between tokenized prompt...` 就是这么来的。
+
+自己拼没有这个问题。反过来，只要两边都固定 `enable_thinking=False`，前缀关系是成立的：这天的 169 条数据里 **0 条**不满足。可以自己验：
+
+```bash
+python code/peek_tokens.py --model Qwen/Qwen3.5-9B
+```
+
+**第二步：告诉 PEFT 把 LoRA 插在哪。**
+
+```python
+peft_cfg = LoraConfig(
+    r=a.rank, lora_alpha=a.alpha, lora_dropout=0.05,
+    bias="none", task_type="CAUSAL_LM",
+    target_modules="all-linear",
+)
+```
+
+| 参数 | 含义 |
+|---|---|
+| `r` | 低秩分解的秩，决定 $A$、$B$ 的形状（§2.2）。这天用 16 |
+| `lora_alpha` | 缩放系数，前向时加的是 $\frac{\alpha}{r}BAx$（§2.5）。习惯取 $2r$，这天 32 |
+| `lora_dropout` | 只作用在 LoRA 旁路上的 dropout，小数据集上防过拟合 |
+| `bias` | 要不要一起训 bias。`"none"` = 不训，adapter 里只有 $A$、$B$ |
+| `task_type` | 告诉 PEFT 这是因果语言模型，保存时才知道该带上哪些层 |
+| `target_modules` | 挂到哪些模块。`"all-linear"` = 除 `lm_head` 外所有 `nn.Linear`，也就是 §2.9 数出来的 248 个 |
+
+别的教程里这一项通常写成 `["q_proj","k_proj","v_proj","o_proj"]`。在这个模型上照抄会踩坑，原因见 §5 第 1 条。
+
+**第三步：训练参数和 Trainer。**
+
+```python
+cfg = SFTConfig(output_dir=a.out, num_train_epochs=a.epochs,
+                per_device_train_batch_size=a.batch, gradient_accumulation_steps=2,
+                learning_rate=a.lr, lr_scheduler_type="cosine", warmup_steps=3,
+                bf16=True, gradient_checkpointing=True,
+                max_length=a.max_seq, completion_only_loss=True)
+
+trainer = SFTTrainer(model=model, args=cfg, train_dataset=ds,
+                     processing_class=tok, peft_config=peft_cfg)
+trainer.model.print_trainable_parameters()
+trainer.train()
+```
+
+几个非默认值的理由：
+
+- `gradient_accumulation_steps=2`：显存只够 batch 4，但想要 batch 8 的梯度，就攒两个 mini-batch 再更新一次。§4 里 43 个 mini-batch 变成 22 个优化步就是这么来的
+- `gradient_checkpointing=True`：前向时不保留全部中间激活值，反向时重算。省显存，换约 20–30% 的时间
+- `warmup_steps=3`：总共才 66 步，按比例算 warmup 已经没意义；另外 transformers 5.x 去掉了 `warmup_ratio`
+- `completion_only_loss=True`：让 Trainer 用上面那个 `completion_mask`
+
+`peft_config` 传进 `SFTTrainer` 之后，它内部替你调 `get_peft_model()` 把模型包起来。这一行打印的就是这天的第一个数字：
+
+```text
+trainable params: 43,278,336 || all params: 8,997,081,600 || trainable%: 0.4810
+```
+
+和 §2.9 手算的 43 278 336 对上了。
+
+**第四步：保存。** `trainer.save_model()` 只写 adapter，不写 base 模型——目录里就两个关键文件：`adapter_config.json`（挂了哪些层、$r$ 多少）和 `adapter_model.safetensors`（166 MB 的 $A$、$B$）。
+
+166 MB 这个数也能对上账：$43\,278\,336 \times 4\ \text{字节} = 173\ \text{MB}$，PEFT 默认按 fp32 存 adapter，而训练时权重是 bf16。
+
+### 3.4 微调（40–60 min）
 
 另开一个终端起遥测和看门狗：
 
@@ -291,7 +475,7 @@ python code/train_lora.py \
 > 为准**——那篇给了 Thor 上验证过的 Full SFT (4B) / LoRA (9B) / QLoRA (27B) 三档配置。
 > 本仓库的脚本是通用 TRL + PEFT 写法，具体版本 pin 见 [踩坑](#5-踩坑)。
 
-### 3.4 对比（20 min）
+### 3.5 对比（20 min）
 
 ```bash
 python code/compare.py \
@@ -300,7 +484,7 @@ python code/compare.py \
     --out private/before_after.md
 ```
 
-### 3.4b 量一下到底学到没有，以及有没有学过头
+### 3.6 量一下到底学到没有，以及有没有学过头
 
 ```bash
 python code/measure_style.py --model Qwen/Qwen3.5-9B --adapter private/adapter --prompts code/prompts.txt
@@ -315,9 +499,45 @@ python code/measure_style.py --model Qwen/Qwen3.5-9B --adapter private/adapter -
 
 判定用的是关键词匹配，只是个近似。模型答“中华人民共和国的首都”而关键词写的是“中国”，就会被算成没答对。加 `--out results.json` 把每条原文存下来，标 ✗ 的先自己看一眼是真忘了还是换了个说法——这天的 `probes.txt` 就是这么调出来的。
 
-> 以上串起来就是 `bash code/run_all.sh`，跑完直接进 3.5。
+> 以上串起来就是 `bash code/run_all.sh`，跑完直接进 3.8。
 
-### 3.5 和它聊天
+### 3.7 推理这边：adapter 怎么挂上去、怎么切回 base
+
+`compare.py`、`measure_style.py`、`chat.py` 三个脚本共用 `code/_common.py` 里的三个函数。先是加载：
+
+```python
+base  = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16,
+                                             device_map="cuda").eval()
+model = PeftModel.from_pretrained(base, adapter).eval()
+```
+
+`PeftModel.from_pretrained` 把 adapter 挂到**已经加载好的** base 上，不是再加载一个 9B。内存里始终只有一份 18 GB 的权重，外加 43 M 个 LoRA 参数。
+
+然后是这天所有对照实验的基础：
+
+```python
+with model.disable_adapter():
+    answer_base = generate(prompt)
+answer_lora = generate(prompt)
+```
+
+`disable_adapter()` 是个上下文管理器，进去时关掉 LoRA 旁路、出来再打开。§4 那张 base vs adapter 的表就是这么来的：同一个进程、同一份权重、同一个随机种子，唯一的变量是那 43 M 个参数参不参与前向。`chat.py` 里的 `/base` 和 `/lora` 也是这一行。
+
+最后是把消息变成张量、以及让它停下来：
+
+```python
+def render(tok, messages, device):
+    return tok.apply_chat_template(messages, add_generation_prompt=True,
+                                   enable_thinking=False, return_tensors="pt",
+                                   return_dict=True).to(device)
+
+def stop_ids(tok):
+    return list({tok.convert_tokens_to_ids("<|im_end|>"), tok.eos_token_id})
+```
+
+两个参数都在 §2.10 讲过了：`add_generation_prompt=True` 补上 `<|im_start|>assistant`，`enable_thinking=False` 让模板把空思考段写完。`stop_ids` 要显式传给 `generate(eos_token_id=...)`——不传，模型说完一轮会继续往下编下一轮的 user 发言。
+
+### 3.8 和它聊天
 
 ```bash
 python code/chat.py --model Qwen/Qwen3.5-9B --adapter private/adapter
@@ -327,7 +547,7 @@ python code/chat.py --model Qwen/Qwen3.5-9B --adapter private/adapter
 
 ## 4. 结果
 
-Jetson AGX Thor（120 W），Qwen3.5-9B bf16，LoRA r=16、α=32、`all-linear`，cosine + 3 步 warmup，batch 4 × 累积 2，3 epoch、lr 1e-4——就是 §3.3 那条命令，数据是仓库自带的 169 条。
+Jetson AGX Thor（120 W），Qwen3.5-9B bf16，LoRA r=16、α=32、`all-linear`，cosine + 3 步 warmup，batch 4 × 累积 2，3 epoch、lr 1e-4——就是 §3.4 那条命令，数据是仓库自带的 169 条。
 
 | | 值 |
 |---|---|
@@ -376,7 +596,7 @@ Jetson AGX Thor（120 W），Qwen3.5-9B bf16，LoRA r=16、α=32、`all-linear`�
 | lr | 句尾 `～` | 口癖开头 | 口癖结尾 | 常识 12 题 | 耗时 |
 |---|---|---|---|---|---|
 | 5e-5 | 7 / 8 | 8 / 8 | 4 / 8 | 11 / 12 | 3.7 min |
-| **1e-4**（§3.3 那条命令） | 8 / 8 | 8 / 8 | 5 / 8 | **12 / 12** | 4.0 min |
+| **1e-4**（§3.4 那条命令） | 8 / 8 | 8 / 8 | 5 / 8 | **12 / 12** | 4.0 min |
 | 2e-4 | 8 / 8 | 8 / 8 | 4 / 8 | 12 / 12 | 3.7 min |
 | base（不加 adapter） | 0 / 8 | 0 / 8 | 0 / 8 | 12 / 12 | — |
 

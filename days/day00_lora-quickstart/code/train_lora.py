@@ -54,11 +54,15 @@ def main():
 
     # Loss on the assistant side only. TRL's conversational prompt/completion
     # splitting does not work here: it tokenizes prompt and prompt+completion
-    # separately and looks for a prefix match, but the Qwen3.5 template emits
-    # "<think>\n" then "\n</think>\n\n", and the two newlines merge into one
-    # token, so the prefix does not line up and the mask lands in the wrong
-    # place ("Mismatch between tokenized prompt..." in the training log).
-    # Tokenizing here instead keeps the boundary explicit and correct.
+    # separately and requires the first to be a token-level prefix of the
+    # second. TRL renders the prompt with the template's default thinking
+    # behaviour, which stops at "<think>\n", while the full conversation
+    # renders "<think>\n\n</think>\n\n". "\n\n" is a single token and does not
+    # match "\n", so the prefix breaks at token 15 and the mask lands in the
+    # wrong place ("Mismatch between tokenized prompt..." in the training log).
+    # Concatenating the two token lists here keeps the boundary exact.
+    # (With enable_thinking=False on both sides the prefix does hold: 0 of the
+    # 169 demo samples mismatch. See code/peek_tokens.py.)
     def encode(r):
         prompt_txt = tok.apply_chat_template(r["messages"][:-1], add_generation_prompt=True,
                                              enable_thinking=False, tokenize=False)

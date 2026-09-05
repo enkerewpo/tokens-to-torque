@@ -26,7 +26,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--state", required=True)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--title", default="Day 00 · LoRA r=16 all-linear, Qwen3.5-9B, 189 samples")
+    ap.add_argument("--title", default="Day 00 · LoRA r=16 all-linear, Qwen3.5-9B, 169 samples")
     a = ap.parse_args()
 
     st = json.load(open(a.state))

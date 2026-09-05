@@ -207,10 +207,79 @@ def fig_svd(p):
     return svg(W, H, "".join(b), css, "SVD 的几何：单位圆经旋转、各方向拉伸、再旋转变成椭圆")
 
 
+# ------------------------------------------- Qwen3.5-9B 结构与 LoRA 的挂点
+# 数字来自模型自己的 config.json 与 meta 设备上的模块清单：
+#   python days/day00_lora-quickstart/code/peek_model.py --model Qwen/Qwen3.5-9B
+LIN_LAYER = [("in_proj_qkv", 4096, 8192), ("in_proj_z", 4096, 4096),
+             ("in_proj_a", 4096, 32), ("in_proj_b", 4096, 32),
+             ("out_proj", 4096, 4096), ("gate_proj", 4096, 12288),
+             ("up_proj", 4096, 12288), ("down_proj", 12288, 4096)]
+FULL_LAYER = [("q_proj", 4096, 8192), ("k_proj", 4096, 1024),
+              ("v_proj", 4096, 1024), ("o_proj", 4096, 4096),
+              ("gate_proj", 4096, 12288), ("up_proj", 4096, 12288),
+              ("down_proj", 12288, 4096)]
+
+
+def fig_qwen_arch(p):
+    """32 层里哪些是全注意力，每层有哪些线性层，LoRA 挂在哪几个上。"""
+    W, H = 830, 452
+    CYC = 6.0
+    css = ("@keyframes tag{0%,6%{opacity:.25}12%,80%{opacity:1}88%,100%{opacity:.25}}"
+           f".tg{{animation:tag {CYC}s ease-in-out infinite}}"
+           "@media(prefers-reduced-motion:reduce){.tg{animation:none;opacity:1}}")
+    b = []
+
+    # --- 32 层的排布：每 4 层里最后一层是全注意力 ---
+    x0, y0, cw = 44, 46, 23
+    b.append(text(x0, y0 - 14, "32 个 decoder 层", 14, p["fg"], weight="700"))
+    for i in range(32):
+        full = (i + 1) % 4 == 0
+        x = x0 + i * cw
+        b.append(f'<rect x="{x}" y="{y0}" width="19" height="30" rx="4" '
+                 f'fill="{AMBER if full else BLUE}" fill-opacity="{0.9 if full else 0.35}" '
+                 f'stroke="{AMBER if full else BLUE}" stroke-width="1.2"/>')
+    b.append(text(x0, y0 + 52, "浅蓝＝线性注意力 ×24", 13, BLUE))
+    b.append(text(x0 + 210, y0 + 52, "橙＝全注意力 ×8（每 4 层一个）", 13, AMBER))
+
+    # --- 两种层的线性层清单，LoRA 挂点用绿色徽标 ---
+    def panel(px, py, title, rows, n):
+        pw, rh = 348, 27
+        out = [box(px, py, pw, 34 + len(rows) * rh, p["dim"], p["line"])]
+        out.append(text(px + 14, py + 23, title, 15, p["fg"], weight="700"))
+        out.append(text(px + pw - 14, py + 23, n, 13, p["sub"], anchor="end", cls="m"))
+        for i, (name, din, dout) in enumerate(rows):
+            ry = py + 34 + i * rh
+            out.append(f'<rect x="{px + 12}" y="{ry}" width="{pw - 24}" height="{rh - 5}" '
+                       f'rx="5" fill="{p["box"]}" stroke="{p["line"]}" stroke-width="1"/>')
+            out.append(text(px + 22, ry + 15, name, 13, p["fg"], cls="m"))
+            out.append(text(px + 176, ry + 15, f"{din} → {dout}", 12, p["sub"], cls="m"))
+            out.append(f'<rect class="tg" x="{px + pw - 74}" y="{ry + 2}" width="54" height="16" '
+                       f'rx="4" fill="{GREEN}" fill-opacity=".16" stroke="{GREEN}" '
+                       f'stroke-width="1.2" style="animation-delay:{-CYC / 8 * i:g}s"/>')
+            out.append(text(px + pw - 47, ry + 14, "+ B·A", 11, GREEN, anchor="middle",
+                            weight="700", cls="m tg",
+                            extra=f'style="animation-delay:{-CYC / 8 * i:g}s"'))
+        return "".join(out)
+
+    b.append(panel(44, 128, "线性注意力层", LIN_LAYER, "8 个 nn.Linear"))
+    b.append(panel(438, 128, "全注意力层", FULL_LAYER, "7 个 nn.Linear"))
+
+    # --- lm_head：唯一被跳过的线性层 ---
+    ly = 128 + 34 + 8 * 27 + 18
+    b.append(box(44, ly, 742, 40, p["dim"], p["line"]))
+    b.append(text(58, ly + 25, "lm_head", 13, p["sub"], cls="m"))
+    b.append(text(150, ly + 25, "4096 → 248320", 12, p["sub"], cls="m"))
+    b.append(text(300, ly + 25, "1.02 B 参数，PEFT 跳过它", 13, p["sub"]))
+    b.append(text(772, ly + 25, "24×8 + 8×7 + 1 = 249", 12, p["sub"], anchor="end", cls="m"))
+    return svg(W, H, "".join(b), css,
+               "Qwen3.5-9B 的 32 层里 8 层是全注意力，LoRA 挂在每层的线性层上")
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     for name, fn in {"fig-lora-arch": fig_lora_arch, "fig-train-step": fig_train_step,
-                     "fig-float-bits": fig_float_bits, "fig-svd": fig_svd}.items():
+                     "fig-float-bits": fig_float_bits, "fig-svd": fig_svd,
+                     "fig-qwen-arch": fig_qwen_arch}.items():
         for suffix, pal in (("light", LIGHT), ("dark", DARK)):
             (OUT / f"{name}-{suffix}.svg").write_text(fn(pal))
         print(f"  {name}  {(OUT / f'{name}-light.svg').stat().st_size} 字节")
