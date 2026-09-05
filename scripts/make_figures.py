@@ -477,12 +477,118 @@ def fig_qwen_block(p):
                "再加回一次。8 层用 self_attn，24 层用 linear_attn")
 
 
+# ------------------------------------------------ 注意力三步（附录 D.3 的例子）
+# 数字和正文里那个手算例子完全一致：q3·kj/√2 → softmax → 加权求和。
+ATTN_ROWS = [("书", "k₁ = (1, 0)", "v₁ = (2, 0)", 0.99, 0.53),
+             ("桌", "k₂ = (0, 1)", "v₂ = (0, 2)", 0.14, 0.23),
+             ("它", "k₃ = (.2, .2)", "v₃ = (.1, .1)", 0.23, 0.25)]
+
+
+def fig_attention(p):
+    W = QW
+    b = [_defs(p)]
+    b.append(text(30, 34, "注意力的三步", fs(W, 1.06), p["fg"], weight="700"))
+    b.append(text(30, 58, "「它」这个位置去看前面每一个位置，决定各取多少",
+                  fs(W, .88), p["sub"]))
+
+    # 查询
+    q = Rect(30, 82, 200, 62)
+    b.append(_card(p, q, "q₃ = (1.4, 0.2)", "「它」在找什么", AMBER, None, True))
+
+    head_y = 176
+    cols = [(30, "位置"), (150, "键 k（我是什么）"), (330, "值 v（我给什么）"),
+            (500, "分数 q·k/√2"), (620, "权重")]
+    for x, t_ in cols:
+        b.append(text(x, head_y, t_, fs(W, .8), p["sub"]))
+
+    y = head_y + 18
+    for i, (tok, k, v, sc, w) in enumerate(ATTN_ROWS):
+        ry = y + i * 62
+        b.append(box(30, ry, 690, 52, p["dim"] if i else p["box"], p["line"], rx=8))
+        b.append(text(46, ry + 32, tok, fs(W), p["fg"], weight="700"))
+        b.append(text(150, ry + 32, k, fs(W, .88), p["sub"], cls="m"))
+        b.append(text(330, ry + 32, v, fs(W, .88), p["sub"], cls="m"))
+        b.append(text(500, ry + 32, f"{sc:.2f}", fs(W, .88), p["fg"], cls="m"))
+        # 权重条：长度就是权重
+        b.append(f'<rect x="620" y="{ry + 18}" width="{80 * w:.1f}" height="18" rx="4" '
+                 f'fill="{GREEN}" fill-opacity=".85"/>')
+        b.append(text(706, ry + 32, f"{w:.2f}", fs(W, .8), p["fg"], anchor="end", cls="m"))
+    last = y + 2 * 62 + 52
+
+    b.append(text(30, last + 34, "① 打分：查询和每个键做内积，除以 √d 稳定数值",
+                  fs(W, .88), p["sub"]))
+    b.append(text(30, last + 58, "② softmax：把三个分数变成加起来等于 1 的权重",
+                  fs(W, .88), p["sub"]))
+    b.append(text(30, last + 82, "③ 加权求和：0.53·v₁ + 0.23·v₂ + 0.25·v₃",
+                  fs(W, .88), p["sub"]))
+
+    out = Rect(430, last + 30, 290, 66)
+    b.append(_card(p, out, "= (1.08, 0.48)", "「它」的新表示，主要是「书」", GREEN))
+    return svg(W, int(out.bottom + 34), "".join(b), "",
+               "注意力三步：查询与每个键内积得到分数，softmax 变成和为一的权重，"
+               "再按权重把各位置的值加权求和")
+
+
+# ------------------------------------------------ prefill / decode 与 KV cache
+def fig_kv_cache(p):
+    W = QW
+    b = [_defs(p)]
+    CELL, GAPX = 52, 8
+
+    def cells(x, y, n, filled, label_first=None):
+        out = []
+        for i in range(n):
+            cx = x + i * (CELL + GAPX)
+            new_one = i >= filled
+            out.append(f'<rect x="{cx}" y="{y}" width="{CELL}" height="40" rx="6" '
+                       f'fill="{p["box"] if not new_one else "none"}" '
+                       f'stroke="{GREEN if new_one else p["line"]}" '
+                       f'stroke-width="{2 if new_one else 1.2}" '
+                       f'{"stroke-dasharray=\"5 4\"" if new_one else ""}/>')
+            out.append(text(cx + CELL / 2, y + 26, f"K{i+1}", fs(W, .8),
+                            GREEN if new_one else p["sub"], anchor="middle", cls="m"))
+        return "".join(out)
+
+    b.append(text(30, 34, "推理的两个阶段与 KV cache", fs(W, 1.06), p["fg"], weight="700"))
+
+    # prefill
+    b.append(text(30, 76, "prefill：把输入的 5 个 token 一次算完", fs(W), p["fg"], weight="700"))
+    b.append(text(30, 100, "大矩阵乘法，吃算力", fs(W, .8), p["sub"]))
+    b.append(cells(30, 116, 5, 0))
+    b.append(text(340, 142, "K、V 存进缓存", fs(W, .88), p["sub"]))
+
+    # decode
+    b.append(text(30, 214, "decode：每步只算 1 个新位置", fs(W), p["fg"], weight="700"))
+    b.append(text(30, 238, "矩阵乘向量，算得少、读得多，吃带宽", fs(W, .8), p["sub"]))
+    b.append(cells(30, 254, 6, 5))
+    b.append(text(400, 280, "读已有的 5 个，追加第 6 个", fs(W, .88), p["sub"]))
+
+    b.append(text(30, 320, "绿色虚线 = 这一步新算出来的；灰色实线 = 缓存里已经有的",
+                  fs(W, .8), p["sub"]))
+    b.append(text(30, 348, "重算一遍要 O(T²)，缓存下来每步只要 O(T)——代价是显存里多一块随长度增长的缓存。",
+                  fs(W, .88), p["sub"]))
+
+    r = Rect(30, 368, 690, 96)
+    b.append(box(r.x, r.y, r.w, r.h, p["dim"], p["line"], rx=10))
+    b.append(text(r.x + 18, r.y + 30, "每 token 每层要存多少", fs(W), p["fg"], weight="700"))
+    b.append(text(r.x + 18, r.y + 56, "2（K 和 V）× KV 头数 × 每头维度 × 每个数的字节数",
+                  fs(W, .88), p["sub"], cls="m"))
+    b.append(text(r.x + 18, r.y + 80,
+                  "Qwen3.5-9B 全注意力层：2 × 4 × 256 × 2 = 4 KB；32 层里只有 8 层是全注意力，"
+                  "所以每 token 32 KB", fs(W, .8), p["sub"]))
+    return svg(W, int(r.bottom + 30), "".join(b), "",
+               "prefill 一次算完整个输入并把 K、V 存进缓存；decode 每步只算一个新位置，"
+               "读缓存再追加")
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     for name, fn in {"fig-lora-arch": fig_lora_arch, "fig-train-step": fig_train_step,
                      "fig-float-bits": fig_float_bits, "fig-svd": fig_svd,
                      "fig-qwen-arch": fig_qwen_arch,
-                     "fig-qwen-block": fig_qwen_block}.items():
+                     "fig-qwen-block": fig_qwen_block,
+                     "fig-attention": fig_attention,
+                     "fig-kv-cache": fig_kv_cache}.items():
         for suffix, pal in (("light", LIGHT), ("dark", DARK)):
             (OUT / f"{name}-{suffix}.svg").write_text(fn(pal))
         print(f"  {name}  {(OUT / f'{name}-light.svg').stat().st_size} 字节")

@@ -216,7 +216,7 @@ tokens-to-torque/
 ├── .claude/skills/              # day-start / day-wrap / privacy-check / thor-guard
 ├── site_src/                    # 文档站（Quarto）：模板与主题，内容是生成物
 ├── scripts/build_docs.py        # 从仓库 markdown 生成站点源码，自动排侧栏
-├── appendix/                    # 附录：线性代数速查等，教程里按需链过去
+├── appendix/                    # 附录：Transformer、线性代数、优化器、数值格式速查
 ├── templates/day.md             # 每日教程模板 = 质量标准
 ├── common/                      # 复用工具
 │   ├── jetson_preflight.sh        #   跑前预检
