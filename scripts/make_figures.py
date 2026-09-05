@@ -688,7 +688,9 @@ def fig_multihead_shapes(p):
                   fs(W, .8), p["sub"]))
     b.append(text(30, y + 74, "这个模型用 GQA：k、v 只有 4 组，形状是 (4, T, 256)，算的时候一组给 4 个查询头共用。",
                   fs(W, .8), p["sub"]))
-    return svg(W, int(y + 98), "".join(b), "",
+    b.append(text(30, y + 100, "@ 是 Python 的矩阵乘法运算符（a @ b 即矩阵 a 乘矩阵 b）；kᵀ 是 k 的转置，行列互换。",
+                  fs(W, .8), p["sub"]))
+    return svg(W, int(y + 124), "".join(b), "",
                "一层注意力里张量形状的变化：(T,4096) 经拆头成 (16,T,256)，"
                "算出 (16,T,T) 的权重，输出 (16,T,256)，合头回 (T,4096)")
 

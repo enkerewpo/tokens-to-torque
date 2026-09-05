@@ -165,7 +165,7 @@ $$
 ![](../assets/fig-multihead-light.svg){.fig .lightbox .light-content fig-alt="多头注意力：4096 维的查询、键、值各切成 16 段，每段 256 维各自算一张 T×T 权重表，输出拼回 4096 维后过 o_proj"}
 ![](../assets/fig-multihead-dark.svg){.fig .lightbox .dark-content fig-alt="多头注意力：4096 维的查询、键、值各切成 16 段，每段 256 维各自算一张 T×T 权重表，输出拼回 4096 维后过 o_proj"}
 
-**整层的形状怎么变。** 把这三步放回一层里，张量的形状是这样走的（写法和 PyTorch 一致，$T$ 是这次输入的 token 数）：
+**整层的形状怎么变。** 把这三步放回一层里，张量的形状是这样走的。写法和 PyTorch 一致：$T$ 是这次输入的 token 数，`@` 是 Python 的矩阵乘法运算符（`a @ b` 就是矩阵 $a$ 乘矩阵 $b$，NumPy 和 PyTorch 都用它），$k^{\top}$ 是 $k$ 的转置——行列互换（[附录 A.1](linear-algebra.md)）。
 
 ![](../assets/fig-multihead-shapes-light.svg){.fig .lightbox .light-content fig-alt="一层注意力里张量形状的变化：(T,4096) 拆头成 (16,T,256)，算出 (16,T,T) 的权重，输出 (16,T,256)，合头回 (T,4096)"}
 ![](../assets/fig-multihead-shapes-dark.svg){.fig .lightbox .dark-content fig-alt="一层注意力里张量形状的变化：(T,4096) 拆头成 (16,T,256)，算出 (16,T,T) 的权重，输出 (16,T,256)，合头回 (T,4096)"}
