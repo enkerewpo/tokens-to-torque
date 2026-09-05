@@ -3,7 +3,7 @@
 > **Phase** 0 · Quickstart
 > **日期** 2026-09-__ · **机器** Jetson AGX Thor · **耗时** ~2h
 
-这一天在一块 Jetson 上用 LoRA 微调 Qwen3.5-9B，让它换一套说话方式。全程约两小时，其中训练只占 4 分钟。
+在一块 Jetson 上用 LoRA 微调 Qwen3.5-9B，让它换一套说话方式。全程约两小时，其中训练只占 4 分钟。
 
 你会做这几件事：
 
@@ -259,7 +259,7 @@ python code/peek_model.py --model Qwen/Qwen3.5-9B --layer 3
 - **全注意力层**（full attention）：标准 Transformer 的那种。每个 token 要和它前面所有 token 算一次注意力，计算量随序列长度平方增长，而且推理时要把每个历史 token 的 K、V 存下来（这就是 KV cache，day 03 专门算这笔账）。
 - **线性注意力层**（linear attention）：把注意力改写成一个随时间递推的状态更新，计算量随长度线性增长，也不需要逐 token 保存 K、V。代价是表达能力比全注意力弱。
 
-Qwen3.5 的做法是混着用：每 3 个线性注意力层配 1 个全注意力层。这天不需要理解线性注意力的数学，只需要知道**两种层里的线性层名字不一样**——下一段会看到，这直接决定了 LoRA 该怎么配。
+Qwen3.5 的做法是混着用：每 3 个线性注意力层配 1 个全注意力层。不需要理解线性注意力的数学，只需要知道**两种层里的线性层名字不一样**——下一段会看到，这直接决定了 LoRA 该怎么配。
 
 先看整条路：一串 token id 进来，经过 embedding、32 个块、一次归一化，最后由 `lm_head` 投到词表（vocabulary）上，得到每个词的分数（logits），softmax 成概率之后才采样（sampling）出下一个 token。每生成一个 token 都要把这条路走一遍。
 
@@ -278,7 +278,7 @@ Qwen3.5 的做法是混着用：每 3 个线性注意力层配 1 个全注意力
 > - **RoPE**：把位置信息以旋转的形式写进 Q 和 K，模型才分得清 token 的先后。
 > - **QK-Norm**：算注意力之前先把 Q、K 各归一化一次，训练更稳。
 > - **SwiGLU**：前馈网络的一种。两条并行的线性变换，一条过 SiLU 当作“门”，逐元素乘到另一条上，再投回原来的维度。
-> - **GatedDeltaNet**：线性注意力的一种具体实现，用一个随位置递推更新的状态，代替“每个 token 对所有历史 token 逐一算注意力”。这天不展开它的数学。
+> - **GatedDeltaNet**：线性注意力的一种具体实现，用一个随位置递推更新的状态，代替“每个 token 对所有历史 token 逐一算注意力”。数学不在这里展开。
 >
 > 这些词的完整解释在 [附录 D · Transformer 速查](../../appendix/transformer.md)。
 
@@ -314,7 +314,7 @@ Qwen3.5 的做法是混着用：每 3 个线性注意力层配 1 个全注意力
 
 `lm_head` 是唯一被跳过的那个，所以是 248 不是 249。这不是我们配的，是 PEFT 的行为：展开 `all-linear` 时它先收集所有 `nn.Linear`，再把 `model.get_output_embeddings()`（也就是 `lm_head`）从名单里剔掉，源码注释写的是 “ignore the last classification head for text generation models”[^peftsrc]。
 
-**注意别把理由记成“它太大了”。** LoRA 的开销是 $r(d_{\text{in}} + d_{\text{out}})$，和原矩阵多大无关——真挂上去也只多 $16 \times (4096 + 248320) \approx 4.0$ M 个参数，占 adapter 的 9%，不算多。跳过它的理由是它干的事和别的线性层不同：其余线性层都在 4096 维的隐空间里做变换，而 `lm_head` 是把隐状态投到 248320 个词上、直接决定每个词的分数。这天要改的是说话风格，风格来自中间层的表示；动输出头则会整体改变模型对所有 token 的打分。这是 PEFT 选的默认，不是定理——真要动它，显式写进 `target_modules` 或 `modules_to_save` 就行。
+**注意别把理由记成“它太大了”。** LoRA 的开销是 $r(d_{\text{in}} + d_{\text{out}})$，和原矩阵多大无关——真挂上去也只多 $16 \times (4096 + 248320) \approx 4.0$ M 个参数，占 adapter 的 9%，不算多。跳过它的理由是它干的事和别的线性层不同：其余线性层都在 4096 维的隐空间里做变换，而 `lm_head` 是把隐状态投到 248320 个词上、直接决定每个词的分数。要改的是说话风格，而风格来自中间层的表示；动输出头则会整体改变模型对所有 token 的打分。这是 PEFT 选的默认，不是定理——真要动它，显式写进 `target_modules` 或 `modules_to_save` 就行。
 
 ### 2.10 模型眼里的一段对话
 
@@ -327,8 +327,8 @@ python code/peek_tokens.py --model Qwen/Qwen3.5-9B
 - `<|im_start|>`（id 248045）——一轮开始，紧跟角色名（`system` / `user` / `assistant`）
 - `<|im_end|>`（id 248046）——一轮结束。**同时是这个模型的 `eos_token`**
 - `<think>` / `</think>`（id 248068 / 248069）——思考段的边界
-- `<|vision_start|>` / `<|image_pad|>`（id 248053 / 248056）——图像输入用；这个模型带一座 27 层的视觉塔，这天用不到
-- `<|endoftext|>`（id 248044）——这天拿它当 pad
+- `<|vision_start|>` / `<|image_pad|>`（id 248053 / 248056）——图像输入用；这个模型带一座 27 层的视觉塔，微调用不上
+- `<|endoftext|>`（id 248044）——拿它当 pad
 
 一条用户消息经过模板（`enable_thinking=False`）变成这样：
 
@@ -342,7 +342,7 @@ python code/peek_tokens.py --model Qwen/Qwen3.5-9B
 '<|im_start|>user\n解释一下什么是 KV cache。<|im_end|>\n<|im_start|>assistant\n<think>\n'
 ```
 
-这天全程用 `enable_thinking=False`：几百条数据教不会推理，而思考段会把生成时间拖长好几倍。
+全程用 `enable_thinking=False`：几百条数据教不会推理，而思考段会把生成时间拖长好几倍。
 
 切成 token 之后，上面那段提示是 18 个：
 
@@ -384,7 +384,7 @@ bash common/jetson_preflight.sh   # 任何一项 FAIL 就别起跑
 python code/make_demo_dataset.py   # -> data/persona_demo.jsonl，169 条
 ```
 
-这个文件本身就在仓库里，跑一遍脚本是为了看清它从哪来。脚本读的是仓库里的文档，所以条数会随文档增删小幅变化，它结束时会打印实际条数——本文的 169 条是写这天时的值。
+这个文件本身就在仓库里，跑一遍脚本是为了看清它从哪来。脚本读的是仓库里的文档，所以条数会随文档增删小幅变化，它结束时会打印实际条数——正文里的 169 条是写作时的值。
 
 它由两部分拼成，都在仓库里、都可复现：
 
@@ -407,7 +407,7 @@ python code/peek.py data/persona_demo.jsonl -n 3
 
 `code/train_lora.py` 不到 120 行，真正干活的是四段。四个库各管一件事：
 
-| 库 | 在这一天负责什么 |
+| 库 | 负责什么 |
 |---|---|
 | `transformers` | 加载 tokenizer 和 base 模型，提供 chat template |
 | `peft` | 把 $A$、$B$ 插进选中的线性层，冻结其余参数 |
@@ -448,7 +448,7 @@ TRL 也能接一整段对话、自己把提问和回答切开，它的办法是�
 
 于是 A 的第 15 个 token 是 `\n`，B 的第 15 个 token 是 `\n\n`，对不上，前缀假设当场失效。TRL 找不到边界，日志里出现 `Mismatch between tokenized prompt...`，掩码落到错误的位置上——day 00 第一版就是这样把生成搞坏的（§5）。
 
-自己拼没有这个问题：边界是数出来的，不依赖任何假设。顺带一提，只要两边都固定 `enable_thinking=False`，前缀假设其实是成立的——这天的 169 条数据里 0 条不满足。可以自己验：
+自己拼没有这个问题：边界是数出来的，不依赖任何假设。顺带一提，只要两边都固定 `enable_thinking=False`，前缀假设其实是成立的——169 条数据里 0 条不满足。可以自己验：
 
 ```bash
 python code/peek_tokens.py --model Qwen/Qwen3.5-9B
@@ -466,8 +466,8 @@ peft_cfg = LoraConfig(
 
 | 参数 | 含义 |
 |---|---|
-| `r` | 低秩分解的秩，决定 $A$、$B$ 的形状（§2.2）。这天用 16 |
-| `lora_alpha` | 缩放系数，前向时加的是 $\frac{\alpha}{r}BAx$（§2.5）。习惯取 $2r$，这天 32 |
+| `r` | 低秩分解的秩，决定 $A$、$B$ 的形状（§2.2）。取 16 |
+| `lora_alpha` | 缩放系数，前向时加的是 $\frac{\alpha}{r}BAx$（§2.5）。习惯取 $2r$，这里是 32 |
 | `lora_dropout` | 只作用在 LoRA 旁路上的 dropout，小数据集上防过拟合 |
 | `bias` | 要不要一起训 bias。`"none"` = 不训，adapter 里只有 $A$、$B$ |
 | `task_type` | 告诉 PEFT 这是因果语言模型，保存时才知道该带上哪些层 |
@@ -497,7 +497,7 @@ trainer.train()
 - `warmup_steps=3`：总共才 66 步，按比例算 warmup 已经没意义；另外 transformers 5.x 去掉了 `warmup_ratio`
 - `completion_only_loss=True`：让 Trainer 用上面那个 `completion_mask`
 
-`peft_config` 传进 `SFTTrainer` 之后，它内部替你调 `get_peft_model()` 把模型包起来。这一行打印的就是这天的第一个数字：
+`peft_config` 传进 `SFTTrainer` 之后，它内部替你调 `get_peft_model()` 把模型包起来。这一行打印出第一个数字：
 
 ```text
 trainable params: 43,278,336 || all params: 8,997,081,600 || trainable%: 0.4810
@@ -549,12 +549,12 @@ python code/measure_style.py --model Qwen/Qwen3.5-9B --adapter private/adapter -
 
 它做两件事：
 
-1. **风格命中率**——同一批问题分别用 base 和 adapter 生成，数风格标记出现了几次。这是这天要留下的数字。
+1. **风格命中率**——同一批问题分别用 base 和 adapter 生成，数风格标记出现了几次，这就是 §4 要填的数字。
 2. **知识保持**——再问几个和训练语料完全无关的事实问题（`code/probes.txt`），看 adapter 还答不答得上来。
 
 第二项是必须的。风格学到了不等于成功：样本少、轮数多的时候，模型会开始**背语料**——你问它“网易是什么公司”，它拿训练集里的句子来答。只看风格命中率发现不了这件事。
 
-判定用的是关键词匹配，只是个近似。模型答“中华人民共和国的首都”而关键词写的是“中国”，就会被算成没答对。加 `--out results.json` 把每条原文存下来，标 ✗ 的先自己看一眼是真忘了还是换了个说法——这天的 `probes.txt` 就是这么调出来的。
+判定用的是关键词匹配，只是个近似。模型答“中华人民共和国的首都”而关键词写的是“中国”，就会被算成没答对。加 `--out results.json` 把每条原文存下来，标 ✗ 的先自己看一眼是真忘了还是换了个说法——`probes.txt` 就是这么调出来的。
 
 > 以上串起来就是 `bash code/run_all.sh`，跑完直接进 3.8。
 
@@ -570,7 +570,7 @@ model = PeftModel.from_pretrained(base, adapter).eval()
 
 `PeftModel.from_pretrained` 把 adapter 挂到**已经加载好的** base 上，不是再加载一个 9B。内存里始终只有一份 18 GB 的权重，外加 43 M 个 LoRA 参数。
 
-然后是这天所有对照实验的基础：
+然后是所有对照实验的基础：
 
 ```python
 with model.disable_adapter():
@@ -657,7 +657,7 @@ Jetson AGX Thor（120 W），Qwen3.5-9B bf16，LoRA r=16、α=32、`all-linear`�
 | 2e-4 | 8 / 8 | 8 / 8 | 4 / 8 | 12 / 12 | 3.7 min |
 | base（不加 adapter） | 0 / 8 | 0 / 8 | 0 / 8 | 12 / 12 | — |
 
-三档都把风格学了过去，彼此差一两次命中，8 个问题的样本量撑不起更强的说法。所以这天不要带走“学习率越大越容易过拟合（overfitting）”这个结论——在这份 169 条、风格标记明确的数据上，它没显出来。
+三档都把风格学了过去，彼此差一两次命中，8 个问题的样本量撑不起更强的说法。所以别带走“学习率越大越容易过拟合（overfitting）”这个结论——在这份 169 条、风格标记明确的数据上，它没显出来。
 
 换个条件就会显出来：语料更少、话题更集中时（比如你自己写的一两百条，见 §6），同样 3 epoch、lr 2e-4，模型会开始逐字复述训练集，问一个无关的事实问题也拿语料里的句子来答。这是本仓库作者在自己语料上的一次观察，不是定理——决定会不会过拟合的是数据量、数据多样性、可训练参数量、轮数、学习率一起作用，不是学习率一个钮。day 31 会取足够多的配置点，把这条曲线正经扫一遍。
 

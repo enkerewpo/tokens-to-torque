@@ -3,7 +3,7 @@
 > **Phase** 1 · serving
 > **日期** 2026-09-05 · **机器** Jetson AGX Thor · **耗时** ~2h
 
-这一天把 day 00 那个"跑一次就退出"的脚本换成一个**常驻的 HTTP 服务**：权重只加载一次，之后用 `curl` 就能问它问题。跑完你会有一条能复现的启动命令，和这块板子上的第一组延迟数字。
+把 day 00 那个“跑一次就退出”的脚本换成一个**常驻的 HTTP 服务**：权重只加载一次，之后用 `curl` 就能问它问题。跑完你会有一条能复现的启动命令，和这块板子上的第一组延迟数字。
 
 你会做这几件事：
 
@@ -16,7 +16,7 @@
 
 day 00 的 `chat.py` 每次运行都要重新加载 18 GB 权重（约 40 秒），而且**一次只服务你一个人**。真实的用法是反过来的：模型常驻在机器上，很多请求陆续到达，服务要决定谁先算、能不能几个人拼在一起算。
 
-这一天起的这个服务，是整个 Phase 1 剩下五天的实验台：day 02 读它的源码看一个请求怎么走完全程，day 03 算它的 KV cache 占多少内存，day 04 加并发看吞吐怎么涨，day 05 做可复现的 benchmark。所以这一天的目标不是"跑起来就行"，而是**起得可复现、并且知道每个参数在干什么**。
+起来的这个服务是 Phase 1 剩下五天的实验台：day 02 读它的源码看一个请求怎么走完全程，day 03 算它的 KV cache 占多少内存，day 04 加并发看吞吐怎么涨，day 05 做可复现的 benchmark。所以目标不是“跑起来就行”，而是**起得可复现、并且知道每个参数在干什么**。
 
 ## 2. 背景
 
@@ -37,7 +37,7 @@ day 00 的脚本是这样的：启动进程 → 加载权重 → 回答一个问
 
 ### 2.2 OpenAI 兼容 API 是什么
 
-**OpenAI 兼容**（OpenAI-compatible）指的是一组约定好的 HTTP 接口：路径、请求体字段、响应格式都和 OpenAI 的 API 一样。这天用到三个：
+**OpenAI 兼容**（OpenAI-compatible）指的是一组约定好的 HTTP 接口：路径、请求体字段、响应格式都和 OpenAI 的 API 一样。下面用到三个：
 
 | 端点 | 干什么 |
 |---|---|
@@ -47,7 +47,7 @@ day 00 的脚本是这样的：启动进程 → 加载权重 → 回答一个问
 
 **为什么几乎所有推理引擎都抄这套接口。** 因为客户端生态已经写好了：官方 `openai` SDK、各种聊天前端、agent 框架，全都会说这套协议。你的服务只要长得一样，别人改一个 `base_url` 就能指过来，代码一行不用动。这是事实标准，不是技术上的必然。
 
-请求体里这天会用到的字段：
+请求体里会用到的字段：
 
 ```json
 {
@@ -86,7 +86,7 @@ $$
 >
 > 在独显上，它是**显存**的比例：`0.9` 表示 vLLM 最多用掉 90% 的显存，剩下的留给别的进程。
 >
-> Thor 是**统一内存**（unified memory）：CPU 和 GPU 共用同一块 122 GB。这个比例切的是这块共享内存的一部分，切太狠会把系统本身挤爆——别的容器、页缓存、你的 ssh 会话都在同一块内存里。这天用 `0.30`（约 36 GB）：18 GB 权重 + KV cache + 工作区，够用且留足余量。
+> Thor 是**统一内存**（unified memory）：CPU 和 GPU 共用同一块 122 GB。这个比例切的是这块共享内存的一部分，切太狠会把系统本身挤爆——别的容器、页缓存、你的 ssh 会话都在同一块内存里。这里用 `0.30`（约 36 GB）：18 GB 权重 + KV cache + 工作区，够用且留足余量。
 
 vLLM 拿到这块内存后，先放权重，剩下的**全部**拿去当 KV cache。所以启动日志里会打印一行"KV cache 能存多少 token"，这个数决定了服务能同时处理多长、多少条请求——day 03 专门算这笔账。
 
@@ -183,7 +183,7 @@ curl -s localhost:8000/v1/models | python3 -c 'import json,sys; print([m["id"] f
 >     --keep q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj
 > ```
 >
-> 496 个张量里保留 256 个：丢掉的是线性注意力层里的 `in_proj_*`、`out_proj`——vLLM 的 GatedDeltaNet 实现不接 LoRA。**训练时能挂的模块，部署时不一定能挂**，这是这天最值钱的一条。
+> 496 个张量里保留 256 个：丢掉的是线性注意力层里的 `in_proj_*`、`out_proj`——vLLM 的 GatedDeltaNet 实现不接 LoRA。**训练时能挂的模块，部署时不一定能挂。**
 
 ### 3.5 量延迟
 
@@ -257,7 +257,7 @@ vLLM 报的 KV cache 容量：**base 895 946 token，挂 adapter 后 879 130 tok
 
 ## 6. 延伸
 
-- vLLM 的 [OpenAI 兼容 server 文档](https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html)——把这天用到的三个端点之外的东西过一眼，尤其是 `/v1/completions` 和 `/metrics`。
-- 想要一个功能更全的客户端（会话历史、多模型管理、RAG）可以起 [Open WebUI](https://github.com/open-webui/open-webui)，它就是指到 OpenAI 兼容接口上工作的。这天不用它，是因为一个 194 行的 HTML 更能说清"接口一样就能换客户端"这件事。
+- vLLM 的 [OpenAI 兼容 server 文档](https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html)——把上面用到的三个端点之外的东西过一眼，尤其是 `/v1/completions` 和 `/metrics`。
+- 想要一个功能更全的客户端（会话历史、多模型管理、RAG）可以起 [Open WebUI](https://github.com/open-webui/open-webui)，它就是指到 OpenAI 兼容接口上工作的。这里不用它，因为一个 194 行的 HTML 更能说清"接口一样就能换客户端"这件事。
 
 **明天要回答的问题：** 一个请求从 HTTP 进来，到第一个 token 出去，在 vLLM 里到底经过了哪些对象？调度器凭什么决定这一步先算谁？→ day 02 读源码。
