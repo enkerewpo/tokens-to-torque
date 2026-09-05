@@ -270,20 +270,40 @@ curl -s localhost:8000/v1/chat/completions \
 
 ### 3.4 把 day 00 的 adapter 挂上去
 
-`serve.sh` 默认会顺手挂上 day 00 训出来的 adapter：
+**怎么挂上去。** vLLM 这边就三个参数，`serve.sh` 里那一行展开就是：
+
+```bash
+vllm serve Qwen/Qwen3.5-9B \
+    --enable-lora \
+    --lora-modules day00-demo=/path/to/adapter \
+    --max-lora-rank 16
+```
+
+| 参数 | 作用 |
+|---|---|
+| `--enable-lora` | 打开 LoRA 支持。不加这个，后面两个参数不起作用 |
+| `--lora-modules 名字=路径` | 挂一个 adapter，可以写多个。**等号左边的名字就是请求里 `model` 字段要填的值** |
+| `--max-lora-rank` | 允许的最大秩，必须 ≥ adapter 的 $r$（day 00 用的是 16）。默认就是 16，取值限于 1/8/16/32/64/128/256/320/512 |
+| `--max-loras` | **一个批次里最多同时用几个不同的 adapter**，默认 1。挂了三个 adapter 但这个值是 1 时，用不同 adapter 的请求只能排到不同批次里去 |
+
+跑起来就是：
 
 ```bash
 LORA=<adapter 目录> LORA_NAME=day00-demo bash code/serve.sh
 ```
 
-挂上之后，**base 和 adapter 在同一个服务里共存**，`/v1/models` 会列出两个名字，请求里换 `model` 就切换：
+**请求怎么路由到 adapter。** 挂上之后，**base 和 adapter 在同一个服务里共存**，`/v1/models` 会列出两个名字，请求里 `model` 填哪个就走哪个（响应里的 `model` 字段会回显你实际用的那个，可以拿它确认没走错）：
 
 ```bash
 curl -s localhost:8000/v1/models | python3 -c 'import json,sys; print([m["id"] for m in json.load(sys.stdin)["data"]])'
 # ['Qwen/Qwen3.5-9B', 'day00-demo']
 ```
 
-这是 LoRA 在部署侧的价值：**一份 18 GB 的底座，挂 N 个几百 MB 的 adapter**，显存里只多出 N × 43 M 个参数，而不是 N 份完整模型。
+**内存里发生了什么。** 底座那 18 GB 只有一份，adapter 加进去的是 43 M 个参数（day 00 §2.9），按 fp32 存也就 166 MB。所以挂 N 个 adapter，显存里多的是 N × 166 MB，而不是 N 份完整模型——**这是 LoRA 在部署侧真正的价值**。
+
+代价在计算上：每一步前向，用 adapter 的那些请求要在底座之外多算一条 $BA$ 旁路。§4 量到的是吞吐掉 15%。day 00 §2.6 说的“推理零开销”指的是**把 adapter 合并进权重**之后——合并了就没法一份底座挂多个 adapter，两者只能选一个。
+
+**换 adapter 要重启服务。** 这个版本的 server 没有暴露运行时挂载的接口（`curl localhost:8000/openapi.json` 里只有 `/v1/models`），加或换 adapter 都得重起一次。
 
 > [!WARNING]
 > **adapter 可能被静默忽略——服务照常起，回答和 base 一模一样**
