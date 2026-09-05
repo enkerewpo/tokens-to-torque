@@ -46,7 +46,19 @@
   main { max-width: 760px; margin: 0 auto; padding: 32px 24px 160px; }
   .turn { margin-bottom: 30px; }
   .who { font-size: 12px; color: var(--sub); margin-bottom: 6px; letter-spacing: .04em; }
-  .body { white-space: pre-wrap; word-break: break-word; }
+  .body { word-break: break-word; }
+  .body.plain { white-space: pre-wrap; }
+  .body p { margin: 0 0 .7em; }
+  .body p:last-child { margin-bottom: 0; }
+  .body ul, .body ol { margin: .4em 0 .8em; padding-left: 1.4em; }
+  .body li { margin: .2em 0; }
+  .body h1, .body h2, .body h3 { font-size: 1em; font-weight: 700; margin: 1em 0 .4em; }
+  .body code { font-family: var(--mono); font-size: .92em; background: var(--field);
+    border: 1px solid var(--line); border-radius: 4px; padding: 0 .3em; }
+  .body pre { background: var(--field); border: 1px solid var(--line); border-radius: 8px;
+    padding: .7em .9em; overflow-x: auto; margin: .5em 0 .8em; }
+  .body pre code { background: none; border: 0; padding: 0; font-size: .88em; }
+  .body a { color: inherit; }
   .stats { margin-top: 8px; font-family: var(--mono); font-size: 12px; color: var(--sub); }
   .stats b { color: var(--fg); font-weight: 600; }
   footer { position: fixed; left: 0; right: 0; bottom: 0; background: var(--bg);
@@ -97,6 +109,51 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
+
+// 模型输出当不可信内容处理：先整体转义，再只把有限的几种记号翻成标签。
+// 不引第三方 markdown 库，是因为它们默认放行原始 HTML，模型吐一段 <script>
+// 就直接执行了。
+function md(src) {
+  // 流式过程中代码块可能只写了开头的 ```，先临时补一个收尾，
+  // 否则围栏会以原文形式露在页面上。
+  if (((src.match(/```/g) || []).length) % 2) src += "\n```";
+  const esc = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const code = [];
+  let t = esc(src)
+    .replace(/```([\s\S]*?)```/g, (_, c) => `\x00${code.push("<pre><code>" + c.replace(/^\w*\n/, "") + "</code></pre>") - 1}\x00`)
+    .replace(/`([^`\n]+)`/g, (_, c) => `\x00${code.push("<code>" + c + "</code>") - 1}\x00`);
+
+  const out = [];
+  let list = null;                       // 当前列表的标签名，null 表示不在列表里
+  for (const raw of t.split("\n")) {
+    const line = raw.trimEnd();
+    const ul = line.match(/^\s*[-*+]\s+(.*)$/);
+    const ol = line.match(/^\s*(\d+)[.)]\s+(.*)$/);
+    const h = line.match(/^(#{1,6})\s+(.*)$/);
+    if (ul || ol) {
+      const tag = ul ? "ul" : "ol";
+      if (list !== tag) { if (list) out.push(`</${list}>`); out.push(`<${tag}>`); list = tag; }
+      out.push("<li>" + inline(ul ? ul[1] : ol[2]) + "</li>");
+      continue;
+    }
+    if (list) { out.push(`</${list}>`); list = null; }
+    if (h) { out.push(`<h3>${inline(h[2])}</h3>`); continue; }
+    if (!line) { continue; }
+    const only = line.match(/^\x00(\d+)\x00$/);        // 整行就是一个代码块，别包 <p>
+    if (only && code[+only[1]].startsWith("<pre")) { out.push(line); continue; }
+    out.push("<p>" + inline(line) + "</p>");
+  }
+  if (list) out.push(`</${list}>`);
+
+  return out.join("").replace(/\x00(\d+)\x00/g, (_, i) => code[+i]);
+
+  function inline(x) {
+    return x
+      .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
+      .replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<i>$2</i>")
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  }
+}
 const state = { url: localStorage.getItem("t2t-url") || location.origin.replace(/:\d+$/, ":8000"),
                 model: null, msgs: [], busy: false };
 $("url").value = state.url;
@@ -140,7 +197,8 @@ function turn(who, text) {
   d.className = "turn";
   d.innerHTML = '<div class="who"></div><div class="body"></div><div class="stats"></div>';
   d.querySelector(".who").textContent = who;
-  d.querySelector(".body").textContent = text || "";
+  const bd = d.querySelector(".body");
+  if (text) { bd.classList.add("plain"); bd.textContent = text; }
   $("log").appendChild(d);
   scrollTo(0, document.body.scrollHeight);
   return d;
@@ -185,7 +243,7 @@ async function send() {
         const piece = JSON.parse(p).choices?.[0]?.delta?.content;
         if (!piece) continue;
         if (ttft === null) ttft = performance.now() - t0;
-        n++; acc += piece; body.textContent = acc;
+        n++; acc += piece; body.innerHTML = md(acc);
         const el = (performance.now() - t0) / 1000;
         stats.textContent = `TTFT ${ttft.toFixed(0)} ms · ${(n / Math.max(el, 1e-6)).toFixed(1)} token/s · ${n} token`;
         scrollTo(0, document.body.scrollHeight);
@@ -196,7 +254,7 @@ async function send() {
     stats.innerHTML = `TTFT <b>${(ttft ?? 0).toFixed(0)} ms</b> · TPOT <b>${tpot.toFixed(0)} ms</b>` +
                       ` · <b>${(n / el).toFixed(1)}</b> token/s · ${n} token · 端到端 <b>${el.toFixed(2)} s</b>`;
   } catch (e) {
-    body.textContent = "出错了：" + e.message;
+    body.classList.add("plain"); body.textContent = "出错了：" + e.message;
   } finally {
     state.busy = false; $("send").disabled = false; $("input").focus();
   }
