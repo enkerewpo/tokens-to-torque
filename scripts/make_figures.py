@@ -290,9 +290,10 @@ def _card(p, r, title, sub_="", stroke=None, fill=None, mono=True):
     out = [box(r.x, r.y, r.w, r.h, fill or p["box"], stroke or p["line"], rx=8)]
     cls = "m" if mono else "s"
     if sub_:
-        out.append(text(r.cx, r.y + 28, title, fs(QW), p["fg"], anchor="middle",
+        # 两行按盒子中心排，不用固定偏移：偏移写死的话，盒子一矮副标题就顶到下边框
+        out.append(text(r.cx, r.cy - 5, title, fs(QW), p["fg"], anchor="middle",
                         weight="600", cls=cls))
-        out.append(text(r.cx, r.y + 50, sub_, fs(QW, .88), p["sub"], anchor="middle", cls="m"))
+        out.append(text(r.cx, r.cy + 17, sub_, fs(QW, .88), p["sub"], anchor="middle", cls="m"))
     else:
         out.append(text(r.cx, r.cy + 6, title, fs(QW), p["fg"], anchor="middle",
                         weight="600", cls=cls))
@@ -837,32 +838,33 @@ def fig_paged(p):
 def fig_request_path(p):
     """左边 API 进程，右边 EngineCore 进程，每段箭头标出这一步交出去的东西。
 
-    箭头上只写名字，各自的内容放正文的表里：图里塞长句会互相压，
-    也没法随页面缩放。
+    间距规则：盒子之间留 64 px，标签写在这段空白的正中，上下各剩约 20 px；
+    横向的标签写在两列之间 128 px 的空当里。不要把标签贴着箭头放。
     """
-    W, H = 790, 600
+    W, H = 880, 780
+    PAD = 22                                   # 虚线框到卡片的内边距
+    BW, BH, VGAP = 224, 70, 56                 # 卡片宽高与竖直间距
+    LX, RX = 172, 520                           # 两列卡片的左边
     b = [_defs(p)]
-    b.append(text(24, 30, "一条请求走过的对象", fs(W, 1.06), p["fg"], weight="700"))
-    b.append(text(24, 52, "箭头上写的是这一步交给下一个模块的东西",
-                  fs(W, .8), p["sub"]))
+    b.append(text(24, 32, "一条请求走过的对象", fs(W, 1.06), p["fg"], weight="700"))
+    b.append(text(24, 56, "箭头旁写的是这一步交给下一个模块的东西", fs(W, .8), p["sub"]))
 
-    BW, BH = 220, 52
-    user = Rect(20, 286, 108, 60)
-    api = Rect(164, 112, BW, BH)
-    inp = Rect(164, 204, BW, BH)
-    cli = Rect(164, 296, BW, BH)
-    outp = Rect(164, 412, BW, BH)
-    sse = Rect(164, 500, BW, BH)
-    sch = Rect(484, 204, BW, BH)
-    gpu = Rect(484, 304, BW, 76)
-    upd = Rect(484, 412, BW, BH)
+    top = 124
+    api = Rect(LX, top, BW, BH)
+    inp = Rect(LX, top + (BH + VGAP), BW, BH)
+    cli = Rect(LX, top + 2 * (BH + VGAP), BW, BH)
+    outp = Rect(LX, top + 3 * (BH + VGAP) + 18, BW, BH)
+    sse = Rect(LX, top + 4 * (BH + VGAP) + 18, BW, BH)
+    sch = Rect(RX, top + (BH + VGAP), BW, BH)
+    gpu = Rect(RX, top + 2 * (BH + VGAP), BW, 96)
+    upd = Rect(RX, top + 3 * (BH + VGAP) + 18, BW, BH)
+    user = Rect(26, cli.y - 6, 116, 64)
 
-    b.append(f'<rect x="150" y="80" width="248" height="490" rx="10" fill="none" '
-             f'stroke="{p["line"]}" stroke-dasharray="6 5"/>')
-    b.append(f'<rect x="470" y="80" width="248" height="490" rx="10" fill="none" '
-             f'stroke="{p["line"]}" stroke-dasharray="6 5"/>')
-    b.append(text(160, 98, "API 进程", fs(W, .8), p["sub"], cls="s"))
-    b.append(text(480, 98, "EngineCore 进程", fs(W, .8), p["sub"], cls="s"))
+    for x0, label in ((LX - PAD, "API 进程"), (RX - PAD, "EngineCore 进程")):
+        b.append(f'<rect x="{x0}" y="{top - 44}" width="{BW + 2 * PAD}" '
+                 f'height="{sse.bottom + PAD - (top - 44)}" rx="10" fill="none" '
+                 f'stroke="{p["line"]}" stroke-dasharray="6 5"/>')
+        b.append(text(x0 + 10, top - 24, label, fs(W, .8), p["sub"], cls="s"))
 
     b.append(_card(p, user, "用户", "prompt", mono=False))
     b.append(_card(p, api, "/v1/chat/completions", "FastAPI"))
@@ -874,53 +876,58 @@ def fig_request_path(p):
     b.append(_card(p, upd, "Scheduler", "update_from_output()"))
 
     b.append(box(gpu.x, gpu.y, gpu.w, gpu.h, p["dim"], BLUE, rx=8))
-    b.append(text(gpu.cx, gpu.y + 26, "Worker · GPU", fs(W), p["fg"], anchor="middle",
+    b.append(text(gpu.cx, gpu.y + 32, "Worker · GPU", fs(W), p["fg"], anchor="middle",
                   weight="600", cls="m"))
-    b.append(text(gpu.cx, gpu.y + 47, "CUDA graph 重放一次前向", fs(W, .8), p["sub"],
+    b.append(text(gpu.cx, gpu.y + 56, "CUDA graph 重放一次前向", fs(W, .8), p["sub"],
                   anchor="middle", cls="s"))
-    b.append(text(gpu.cx, gpu.y + 65, "再采样出下一个 token", fs(W, .8), p["sub"],
+    b.append(text(gpu.cx, gpu.y + 78, "再采样出下一个 token", fs(W, .8), p["sub"],
                   anchor="middle", cls="s"))
 
     def arrow(x1, y1, x2, y2, color):
         return (f'<path d="M{x1} {y1}L{x2} {y2}" stroke="{color}" stroke-width="1.7" '
                 f'fill="none" marker-end="url(#qa)"/>')
 
-    def midlabel(a_, c_, s_, color):
-        """两个上下相邻的盒子之间，把名字写在间隙正中。"""
-        return text(a_.cx + 10, (a_.bottom + c_.top) / 2 + 5, s_, fs(W, .78), color, cls="s")
+    def vgap_label(a_, c_, s_, color, dx=16):
+        """竖直间隙正中写标签，和箭头错开 dx，再加一圈背景色描边。"""
+        return text(a_.cx + dx, (a_.bottom + c_.top) / 2 + 5, s_, fs(W, .8), color,
+                    cls="s", halo=p["box"])
 
-    b.append(arrow(user.x + user.w, user.cy - 40, api.x - 8, api.cy, p["sub"]))
-    b.append(text(user.cx, user.y - 12, "文本 + 采样参数", fs(W, .78), p["sub"],
-                  anchor="middle", cls="s"))
-
-    b.append(arrow(api.cx, api.bottom, api.cx, inp.top - 4, p["sub"]))
-    b.append(arrow(inp.cx, inp.bottom, inp.cx, cli.top - 4, p["sub"]))
-    b.append(midlabel(inp, cli, "token ids", p["sub"]))
-
-    b.append(arrow(cli.x + cli.w, cli.cy, sch.x - 8, sch.cy, GREEN))
-    b.append(text((cli.x + cli.w + sch.x) / 2, cli.cy - 18, "Request", fs(W, .82), GREEN,
-                  anchor="middle", weight="600", cls="m"))
-
-    b.append(arrow(sch.cx, sch.bottom, sch.cx, gpu.top - 4, GREEN))
-    b.append(midlabel(sch, gpu, "SchedulerOutput", GREEN))
-
-    b.append(arrow(gpu.cx, gpu.bottom, gpu.cx, upd.top - 4, BLUE))
-    b.append(midlabel(gpu, upd, "新 token 的 id", BLUE))
-
-    b.append(arrow(upd.x, upd.cy, outp.x + outp.w + 8, outp.cy, BLUE))
-    b.append(text((outp.x + outp.w + upd.x) / 2, upd.cy - 14, "EngineCoreOutputs",
-                  fs(W, .8), BLUE, anchor="middle", weight="600", cls="m"))
-
-    b.append(arrow(outp.cx, outp.bottom, outp.cx, sse.top - 4, p["sub"]))
-    b.append(arrow(sse.x, sse.cy, user.cx, sse.cy, p["sub"]))
-    b.append(arrow(user.cx, sse.cy - 6, user.cx, user.bottom + 8, p["sub"]))
-    b.append(text(user.cx + 8, sse.cy - 12, "一小段文本", fs(W, .78), p["sub"], cls="s"))
-
-    loop_x = gpu.x + gpu.w + 30
-    b.append(f'<path d="M{upd.x + upd.w} {upd.cy}H{loop_x}V{sch.cy}H{sch.x + sch.w + 6}" '
+    # 用户 → 接口
+    b.append(arrow(user.x + user.w, user.y - 10, api.x - 10, api.cy + 10, p["sub"]))
+    b.append(text(user.cx, user.y - 26, "文本 + 采样参数", fs(W, .8), p["sub"],
+                  anchor="middle", cls="s", halo=p["box"]))
+    # API 进程内部
+    b.append(arrow(api.cx, api.bottom, api.cx, inp.top - 6, p["sub"]))
+    b.append(arrow(inp.cx, inp.bottom, inp.cx, cli.top - 6, p["sub"]))
+    b.append(vgap_label(inp, cli, "token ids", p["sub"]))
+    # 跨进程：两列之间有 112 px 空当，标签写在正中
+    mid_x = (cli.x + cli.w + sch.x) / 2
+    b.append(arrow(cli.x + cli.w + 6, cli.cy, sch.x - 10, sch.cy + 8, GREEN))
+    b.append(text(mid_x, cli.top - 14, "Request", fs(W, .84), GREEN, anchor="middle",
+                  weight="600", cls="m", halo=p["box"]))
+    # 引擎内部
+    b.append(arrow(sch.cx, sch.bottom, sch.cx, gpu.top - 6, GREEN))
+    b.append(vgap_label(sch, gpu, "SchedulerOutput", GREEN))
+    b.append(arrow(gpu.cx, gpu.bottom, gpu.cx, upd.top - 6, BLUE))
+    b.append(vgap_label(gpu, upd, "新 token 的 id", BLUE))
+    # 回到 API 进程
+    b.append(arrow(upd.x - 6, upd.cy, outp.x + outp.w + 10, outp.cy, BLUE))
+    b.append(text(mid_x, upd.top - 14, "EngineCoreOutputs", fs(W, .82), BLUE,
+                  anchor="middle", weight="600", cls="m", halo=p["box"]))
+    b.append(arrow(outp.cx, outp.bottom, outp.cx, sse.top - 6, p["sub"]))
+    # 回到用户
+    b.append(arrow(sse.x - 6, sse.cy, user.cx, sse.cy, p["sub"]))
+    b.append(arrow(user.cx, sse.cy - 8, user.cx, user.bottom + 10, p["sub"]))
+    b.append(text(user.cx + 10, sse.cy - 14, "一小段文本", fs(W, .8), p["sub"], cls="s",
+                  halo=p["box"]))
+    # 主循环
+    loop_x = gpu.x + gpu.w + PAD + 26
+    b.append(f'<path d="M{upd.x + upd.w + 6} {upd.cy}H{loop_x}V{sch.cy}H{sch.x + sch.w + 8}" '
              f'stroke="{AMBER}" stroke-width="1.7" fill="none" marker-end="url(#qa)"/>')
-    b.append(text(loop_x + 6, (sch.cy + upd.cy) / 2 - 7, "没答完", fs(W, .78), AMBER, cls="s"))
-    b.append(text(loop_x + 6, (sch.cy + upd.cy) / 2 + 11, "再走一轮", fs(W, .78), AMBER, cls="s"))
+    b.append(text(loop_x + 10, (sch.cy + upd.cy) / 2 - 8, "没答完", fs(W, .8), AMBER,
+                  cls="s", halo=p["box"]))
+    b.append(text(loop_x + 10, (sch.cy + upd.cy) / 2 + 12, "再走一轮", fs(W, .8), AMBER,
+                  cls="s", halo=p["box"]))
     return svg(W, H, "".join(b), label=(
         "请求路径：文本进 API 进程分词，作为 Request 经 ZMQ 交给引擎；调度器给出这一步"
         "算谁、各几个 token、KV 块在哪；GPU 前向并采样；新 token 回到调度器继续，"
@@ -994,13 +1001,14 @@ def fig_request_states(p):
 
     b.append(a(wait.x + wait.w, wait.cy, run.x - 8, run.cy, GREEN))
     b.append(text((wait.x + wait.w + run.x) / 2, wait.cy - 16, "被调度选中", fs(W, .78),
-                  GREEN, anchor="middle", cls="s"))
+                  GREEN, anchor="middle", cls="s", halo=p["box"]))
     b.append(a(run.cx, run.bottom, run.cx, pre.top - 8, AMBER))
     b.append(text(run.cx + 12, (run.bottom + pre.top) / 2 + 4, "KV 块不够，被抢占",
-                  fs(W, .78), AMBER, cls="s"))
+                  fs(W, .78), AMBER, cls="s", halo=p["box"]))
     b.append(f'<path d="M{pre.x} {pre.cy}H{wait.cx}V{wait.bottom + 6}" stroke="{AMBER}" '
              f'stroke-width="1.6" fill="none" marker-end="url(#qa)"/>')
-    b.append(text(wait.cx + 8, pre.cy - 10, "块已释放，重新排队", fs(W, .78), AMBER, cls="s"))
+    b.append(text(wait.cx + 8, pre.cy - 10, "块已释放，重新排队", fs(W, .78), AMBER, cls="s",
+                  halo=p["box"]))
     b.append(a(run.x + run.w, run.cy - 14, fin.x - 8, fin.cy))
     b.append(a(run.x + run.w, run.cy, cap.x - 8, cap.cy))
     b.append(a(run.x + run.w, run.cy + 14, ab.x - 8, ab.cy))
@@ -1041,10 +1049,10 @@ def fig_queue_measured(p):
             hw = wait * UNIT
             b.append(f'<rect x="{x:.1f}" y="{TOP + LH - hr - hw:.1f}" width="{w:.1f}" '
                      f'height="{hw:.1f}" fill="{AMBER}" fill-opacity=".45"/>')
-    b.append(text(tx(3.1), TOP + LH - 8 * UNIT - 4 * UNIT - 8, "4 条在等",
-                  fs(W, .78), AMBER, cls="s"))
-    b.append(text(tx(3.1), TOP + LH - 8 * UNIT + 16, "8 条在跑", fs(W, .78), "#3d6600", cls="s"))
-    b.append(text(tx(4.45), TOP + LH - 4 * UNIT - 8, "空出位置，等的 4 条补进来",
+    # 标注写在柱子外面：写进柱子里离边框太近，看着像贴着
+    b.append(text(tx(3.1), TOP + LH - 12 * UNIT - 10, "8 条在跑 + 4 条在等",
+                  fs(W, .78), p["sub"], cls="s"))
+    b.append(text(tx(4.45), TOP + LH - 4 * UNIT - 10, "空出位置，等的 4 条补进来",
                   fs(W, .78), p["sub"], cls="s"))
 
     # 下：12 条各自的端到端时间
@@ -1082,6 +1090,33 @@ def fig_queue_measured(p):
         "排队的 5.44 秒，差的 1.18 秒是等待时间"))
 
 
+
+def check_bounds(name: str, svg_text: str) -> list[str]:
+    """粗估每段文字的宽度，报出超出画布的。
+
+    估算：中日韩字符按 1.0 em，其余按 0.55 em。图在不同环境里用的字体不同
+    （站点有 CDN 字体，GitHub 上没有），所以留 8 px 余量再判。
+    """
+    import re as _re
+    m = _re.search(r'viewBox="0 0 ([\d.]+) ([\d.]+)"', svg_text)
+    if not m:
+        return []
+    W = float(m.group(1))
+    bad = []
+    for t in _re.finditer(r'<text x="([-\d.]+)"[^>]*?font-size="([\d.]+)"[^>]*?'
+                          r'text-anchor="(\w+)"[^>]*?>(.*?)</text>', svg_text):
+        x, size, anchor, body = float(t.group(1)), float(t.group(2)), t.group(3), t.group(4)
+        body = _re.sub(r"<[^>]+>", "", body)
+        w = sum(size * (1.0 if ch > "\u2e80" else 0.55) for ch in body)
+        right = x if anchor == "end" else x + w / 2 if anchor == "middle" else x + w
+        left = x - w if anchor == "end" else x - w / 2 if anchor == "middle" else x
+        if right > W - 8:
+            bad.append(f"    右边超出 {right - W:+.0f} px：{body[:24]}")
+        elif left < 8:
+            bad.append(f"    左边超出 {left:.0f} px：{body[:24]}")
+    return bad
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     for name, fn in {"fig-lora-arch": fig_lora_arch, "fig-train-step": fig_train_step,
@@ -1099,8 +1134,14 @@ def main():
                      "fig-request-states": fig_request_states,
                      "fig-queue-measured": fig_queue_measured}.items():
         for suffix, pal in (("light", LIGHT), ("dark", DARK)):
-            (OUT / f"{name}-{suffix}.svg").write_text(fn(pal))
-        print(f"  {name}  {(OUT / f'{name}-light.svg').stat().st_size} 字节")
+            out = fn(pal)
+            (OUT / f"{name}-{suffix}.svg").write_text(out)
+            if suffix == "light":
+                warn = check_bounds(name, out)
+        print(f"  {name}  {(OUT / f'{name}-light.svg').stat().st_size} 字节"
+              + ("  ← 文字出界" if warn else ""))
+        for line in warn:
+            print(line)
 
 
 if __name__ == "__main__":

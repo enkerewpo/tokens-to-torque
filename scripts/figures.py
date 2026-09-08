@@ -44,7 +44,15 @@ def box(x, y, w, h, fill, stroke, rx=9, extra=""):
             f'fill="{fill}" stroke="{stroke}" stroke-width="1.2" {extra}/>')
 
 
-def text(x, y, s, size=12, fill="#000", anchor="start", weight="400", cls="s", extra=""):
+def text(x, y, s, size=12, fill="#000", anchor="start", weight="400", cls="s", extra="",
+         halo=None):
+    """halo 传背景色时给文字加一圈同色描边，压在线条上也读得清。
+
+    用 paint-order 让描边画在填充下面，不必为每个标签算一个避让用的白底矩形。
+    """
     cls = " ".join("t2t-" + c for c in cls.split())
+    if halo:
+        extra += (f' stroke="{halo}" stroke-width="4" stroke-linejoin="round" '
+                  f'paint-order="stroke"')
     return (f'<text x="{x}" y="{y}" class="{cls}" font-size="{size}" fill="{fill}" '
             f'text-anchor="{anchor}" font-weight="{weight}" {extra}>{s}</text>')
