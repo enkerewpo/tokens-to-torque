@@ -5,9 +5,20 @@ description: 开始课表里的某一天。当用户说 "day NN"、"开始今天
 
 # 开始一天
 
+## 0. 先确定是哪条线
+
+课表有两条线。使用者说「day 14」是模型线，说「A03」是 Agent 线。说「今天的」而没给编号时，看 `README.md` 的两张进度表，接着没做完的那条往下走；两条都能接时问一句。
+
+| | 目录 | 编号 |
+|---|---|---|
+| 模型线 | `days/dayNN_topic-name/` | day 00 到 72 |
+| Agent 线 | `agent/aNN_topic-name/` | A00 到 A23 |
+
+两条线的六节结构、写作规范、数字要求完全一样。
+
 ## 1. 取出任务
 
-从仓库根目录的 `ROADMAP.md` 里找到 `| **NN** |` 那一行，读出三列：**目标 / 动手 / 产出**。同时看一眼 `RESOURCES.md` 里这条线的主材料——**只给一份**，不要堆链接。
+从仓库根目录的 `ROADMAP.md` 里找到 `| **NN** |` 或 `| **ANN** |` 那一行，读出三列：**目标 / 动手 / 产出**。同时看一眼 `RESOURCES.md` 里这条线的主材料——**只给一份**，不要堆链接。
 
 ## 2. 建目录
 
@@ -15,6 +26,11 @@ description: 开始课表里的某一天。当用户说 "day NN"、"开始今天
 NN=14; SLUG=memory-hierarchy-tiled-matmul     # slug 用英文小写连字符，能概括当天主题
 mkdir -p days/day${NN}_${SLUG}/{code,results,private}
 cp templates/day.md days/day${NN}_${SLUG}/README.md
+
+# Agent 线换成：
+# NN=03; SLUG=claude-code-harness
+# mkdir -p agent/a${NN}_${SLUG}/{code,results,private}
+# cp templates/day.md agent/a${NN}_${SLUG}/README.md
 ```
 
 填好 README 顶部的 Phase / 日期 / 机器 / 耗时。

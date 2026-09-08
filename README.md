@@ -4,7 +4,7 @@
 
 **从 token 到扭矩：72 天，把一个大模型一路跑到机器人关节上。**
 
-`serving` · `CUDA` · `training` · `VLM` · `VLA` · `WAM`
+`serving` · `CUDA` · `training` · `VLM` · `VLA` · `WAM` · `agent`
 
 [![Stars](https://img.shields.io/github/stars/enkerewpo/tokens-to-torque?style=flat&color=76B900)](https://github.com/enkerewpo/tokens-to-torque/stargazers) [![Discussions](https://img.shields.io/github/discussions/enkerewpo/tokens-to-torque?style=flat&color=76B900)](https://github.com/enkerewpo/tokens-to-torque/discussions) [![Site](https://img.shields.io/badge/site-enkerewpo.github.io-informational.svg)](https://enkerewpo.github.io/tokens-to-torque/) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) ![Progress](https://img.shields.io/badge/progress-3%2F73_days-76B900.svg) ![Hardware](https://img.shields.io/badge/hardware-Jetson%20%2F%20any%20CUDA%20GPU-76B900.svg)
 
@@ -15,7 +15,18 @@
 
 </div>
 
-这是一份动手课表。每天两小时：读一节，跑一个实验，记下一个数字。从推理服务开始，经过 CUDA、训练和视觉语言模型，最后到能输出动作的 VLA 和世界模型。全部实验在一块 Jetson AGX Thor 上跑过，大部分内容换任何一块 CUDA GPU 都成立。
+这是一份动手课表，两条线并行。**模型线**自底向上把模型这一层拆开：推理服务、CUDA、训练、视觉语言模型、VLA、世界模型。**Agent 线**自顶向下看这些模型怎么被组织成能干活的系统：命令行 agent、桌面 agent，最后落到具身 agent。每天两小时，读一节，跑一个实验，记下一个数字。全部实验在一块 Jetson AGX Thor 上跑过，大部分内容换任何一块 CUDA GPU 都成立。
+
+具身 agent 那一段的实验对象是 [Robonix](https://github.com/syswonder/robonix)，一个面向具身智能的操作系统：把机器人硬件抽象成可发现的能力，把模型和技能当作程序来装载、运行和管理。
+
+<p>
+  <a href="https://robonix.ai">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="site_src/assets/robonix-logo-dark.svg">
+      <img alt="Robonix" src="site_src/assets/robonix-logo.svg" width="260">
+    </picture>
+  </a>
+</p>
 
 **在线阅读：<https://enkerewpo.github.io/tokens-to-torque/>**（公式、搜索、深色模式、评论）
 
@@ -27,6 +38,9 @@
 - 一个接上视觉的模型，projector 是自己训的（Phase 4）
 - 一个在边缘设备上运行的 VLA 策略，附控制频率和温度曲线（Phase 5）
 - 一个感知 + VLA + 世界模型的最小闭环（Phase 6）
+- 一个自己写的命令行 agent，带工具调用、上下文压缩、权限边界和一套评测（Agent 线 A1）
+- 一个能看屏幕操作界面的桌面 agent，视觉定位来自自己训的模型（Agent 线 A2）
+- 把训好的 VLA 策略包成 Robonix 的一个技能，由 agent 调度执行（Agent 线 A3）
 
 每一天都以一个数字收尾。已经跑出来的两组：
 
@@ -60,6 +74,8 @@
 
 ## 课表
 
+**模型线**
+
 | Phase | 主题 | Days | 进度 |
 |---|---|---|---|
 | 0 | Quickstart：微调入门 | 00 | 1 / 1 |
@@ -70,6 +86,17 @@
 | 5 | VLA：生成动作 | 49 到 60 | 0 / 12 |
 | 6 | WAM：世界动作模型 | 61 到 72 | 0 / 12 |
 | | | 合计 | 3 / 73 |
+
+**Agent 线**
+
+| 段 | 主题 | Days | 进度 |
+|---|---|---|---|
+| A1 | 命令行 agent：自己写一个，再读 Codex、Claude Code 等 harness | A00 到 A07 | 0 / 8 |
+| A2 | 桌面 agent：看屏幕、定位元素、失败恢复 | A08 到 A13 | 0 / 6 |
+| A3 | 具身 agent：Robonix 上的能力、技能、规划与安全 | A14 到 A23 | 0 / 10 |
+| | | 合计 | 0 / 24 |
+
+每周 6 个学习日：4 天模型线，2 天 Agent 线。Agent 线的桌面部分要用模型线 Phase 4 的视觉语言模型，具身部分要挂 Phase 5 训出的策略，所以它的三段排在对应阶段之后。
 
 完整的每日目标、动手内容和产出在 [ROADMAP.md](ROADMAP.md)。
 

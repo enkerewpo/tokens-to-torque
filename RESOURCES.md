@@ -76,6 +76,37 @@
 - **Cosmos Policy**（Kim et al., 2026；把动作/未来状态/value 当作 latent frame 塞进视频扩散序列）
 - Dreamer V3、Genie 3、V-JEPA 2 — 背景谱系
 
+## 7. Agent 与 agent OS（Agent 线）
+
+主材料：[Robonix](https://github.com/syswonder/robonix) 的源码和 [文档](https://book.robonix.ai/)。具身 agent 那 10 天全部围绕它，先把 capability、skill、brain 三层的接口读懂，其余材料都是对照组。
+
+**要读的实现**
+
+| 材料 | 用在哪 | 链接 |
+|---|---|---|
+| Robonix | A15 到 A22 的实验对象 | <https://github.com/syswonder/robonix> · <https://robonix.ai> |
+| Robonix 包目录 | A18 发布技能时看格式 | <https://packages.robonix.ai/> |
+| OM1 | A19 的对照组，机器人侧的硬件抽象层 | <https://github.com/OpenMind/OM1> |
+| AIOS | A23 的起点，把调度、上下文、内存、权限做成 agent 的内核服务 | [arXiv:2403.16971](https://arxiv.org/abs/2403.16971) |
+
+**agent 运行时与服务的近期论文**（A23 用，按主题排）
+
+| 论文 | 解决什么 | 链接 |
+|---|---|---|
+| Efficient LLM Serving for Agentic Workflows | 从数据系统的角度看 agent 工作流的服务开销 | [arXiv:2603.16104](https://arxiv.org/abs/2603.16104) |
+| A Policy-Driven Runtime Layer for Agentic LLM Serving | 在服务层之上加一层按策略调度的运行时 | [arXiv:2605.27744](https://arxiv.org/abs/2605.27744) |
+| SMetric | 以会话为单位重新设计 agent 请求的调度 | [arXiv:2607.08565](https://arxiv.org/abs/2607.08565) |
+| Scepsy | 把 agent 工作流聚合成流水线来服务 | [arXiv:2604.15186](https://arxiv.org/abs/2604.15186) |
+| Nalar | 一个 agent 服务框架 | [arXiv:2601.05109](https://arxiv.org/abs/2601.05109) |
+
+**会议**。这个方向变化很快，每次开会后要回来更新这一节：
+
+- [SOSP 2026 录用列表](https://sigops.org/s/conferences/sosp/2026/accepted.html)
+- [HotOS](https://sigops.org/s/conferences/hotos/) 的观点论文最能看出方向，篇幅短，适合当周读物
+- [LLMSys 论文列表](https://github.com/AmberLJC/LLMSys-PaperList/) 由社区维护，用它补漏
+
+**维护约定**：每次读完一篇就把它加进上面的表，写清楚“解决什么”。表里超过一年没人引用、也没进课表的条目直接删掉，这一节的价值在于短。
+
 ## 用法提醒
 
 - 每天只开**一个**链接。开三个等于零个。

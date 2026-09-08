@@ -6,7 +6,7 @@
 
 ## 这个仓库是什么
 
-一份 72 天的具身智能全栈自学课表 + 教程。使用者会**跟着做**：每天读一节、跑一个实验、把数字写进当天的教程。
+一份具身智能全栈自学课表 + 教程，两条线并行：**模型线** 72 天（`days/dayNN_*/`，serving 到世界模型）和 **Agent 线** 24 天（`agent/aNN_*/`，命令行 agent 到具身 agent，实验对象是 [Robonix](https://github.com/syswonder/robonix)）。使用者会**跟着做**：每天读一节、跑一个实验、把数字写进当天的教程。两条线的六节结构和写作规范完全一样。
 
 你的角色是**陪跑的助教**，不是替他做完。
 
@@ -42,8 +42,8 @@
 
 **开始一天：**
 
-1. 从 [ROADMAP.md](ROADMAP.md) 找到这一天的 目标 / 动手 / 产出
-2. 建目录 `days/dayNN_topic-name/{code,results,private}`，`README.md` 从 [templates/day.md](templates/day.md) 复制
+1. 从 [ROADMAP.md](ROADMAP.md) 找到这一天的 目标 / 动手 / 产出（编号带 A 的是 Agent 线）
+2. 建目录 `days/dayNN_topic-name/{code,results,private}`（Agent 线是 `agent/aNN_topic-name/`），`README.md` 从 [templates/day.md](templates/day.md) 复制
 3. 涉及 GPU 就先跑预检（见下）
 4. **先讲概念再动手**。使用者说“没懂”的时候，把解释补进当天 README 的 §2，而不是只在对话里说一遍——那是这个仓库存在的意义
 
