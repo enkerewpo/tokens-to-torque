@@ -90,7 +90,12 @@ def main() -> None:
     time.sleep(0.5)                      # 指标是请求结束后才写进去的
     after = scrape(a.url)
 
-    print(f"客户端量到的端到端：{e2e * 1000:.1f} ms，收到 {chunks} 个块\n")
+    steps = after.get("vllm:iteration_tokens_total_count", 0) - \
+        before.get("vllm:iteration_tokens_total_count", 0)
+    toks = after.get("vllm:iteration_tokens_total_sum", 0) - \
+        before.get("vllm:iteration_tokens_total_sum", 0)
+    print(f"客户端量到的端到端：{e2e * 1000:.1f} ms，收到 {chunks} 个块")
+    print(f"引擎走了 {steps:.0f} 步，共处理 {toks:.0f} 个 token\n")
     print(f"{'指标':<38} {'这一条的值':>12}   含义")
     for base, (unit, meaning) in WANTED.items():
         s, c = f"{base}_sum", f"{base}_count"

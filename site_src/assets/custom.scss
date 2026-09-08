@@ -100,9 +100,32 @@ div.sourceCode pre, pre > code {
   line-height: 1.62;
   padding-right: 2.6rem;
 }
-/* 折行只是兜底，命令本身写短为主。
-   不要在这里做悬挂缩进：负的 text-indent 会把每行开头几个字符移出可视区。 */
+/* 折行只是兜底，命令本身写短为主。折行是否发生，靠行号看：
+   折下来的那一截没有行号，和新起一行区分得开。
+   不要给每行套 span 样式或用负 margin，会把行首字符移出可视区。 */
 div.sourceCode pre code, pre > code { overflow-wrap: anywhere; }
+
+/* 带行号的代码块（源码卡片里的）。这套主题没带 Pandoc 的行号样式，
+   计数器规则要自己写。起始值由 startFrom 生成的 counter-reset 决定，
+   所以页面上的行号和 GitHub 上的行号一致。 */
+div.sourceCode pre.numberSource, pre.numberSource code {
+  white-space: pre;          /* 行号布局用负偏移实现，折行会把行首裁掉 */
+  overflow-wrap: normal;
+}
+/* 主题的做法是把每一行整体左移 4em，让号码落在 pre 的左外侧；
+   而 pre 是 overflow:auto，左外侧的东西会被裁掉，于是只剩一段空白。
+   这里取消位移，让号码作为每行的第一个行内块正常占位。 */
+div.sourceCode pre.numberSource { overflow-x: auto; margin-left: 0; padding-left: 4px; }
+pre.numberSource code > span { counter-increment: source-line; left: 0; }
+pre.numberSource code > span > a:first-child::before {
+  content: counter(source-line);
+  display: inline-block;
+  width: 3.4em;
+  padding-right: 1em;
+  text-align: right;
+  color: #AEB6BF;
+  user-select: none;
+}
 
 /* ---- 源码卡片：GitHub 图标 + 路径 + 行号 + 跳转 ---- */
 .srccard {

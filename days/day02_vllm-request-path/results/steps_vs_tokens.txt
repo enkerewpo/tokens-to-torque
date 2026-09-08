@@ -1,0 +1,12 @@
+同一条提示（20 个 token），只改 max_tokens，各跑一次
+Qwen3.5-0.8B，--max-model-len 2048 --gpu-memory-utilization 0.04 --max-num-seqs 8
+
+ max_tokens   引擎步数   处理的 token 数
+          1          1                21
+          8          8                28
+         16         16                36
+         32         32                52
+         64         64                84
+
+步数 = 生成的 token 数
+处理的 token 数 = 提示 20 + 生成

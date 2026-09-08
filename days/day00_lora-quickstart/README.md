@@ -407,7 +407,7 @@ python code/peek.py data/persona_demo.jsonl -n 3
 
 构造这个数组只需要知道提问占了前多少个 token。做法是两段分别转换，再首尾相接：
 
-[days/day00_lora-quickstart/code/train_lora.py](https://github.com/enkerewpo/tokens-to-torque/blob/main/days/day00_lora-quickstart/code/train_lora.py#L66-L74)
+[days/day00_lora-quickstart/code/train_lora.py](https://github.com/enkerewpo/tokens-to-torque/blob/b4212672415c0ac56b72f2fd0cf757a9a73e8f7c/days/day00_lora-quickstart/code/train_lora.py#L66-L74)
 ```python
 def encode(r):
     prompt_txt = tok.apply_chat_template(r["messages"][:-1], add_generation_prompt=True,
@@ -440,7 +440,7 @@ python code/peek_tokens.py --model Qwen/Qwen3.5-9B
 
 **第二步：告诉 PEFT 把 LoRA 插在哪。**
 
-[days/day00_lora-quickstart/code/train_lora.py](https://github.com/enkerewpo/tokens-to-torque/blob/main/days/day00_lora-quickstart/code/train_lora.py#L86-L90)
+[days/day00_lora-quickstart/code/train_lora.py](https://github.com/enkerewpo/tokens-to-torque/blob/b4212672415c0ac56b72f2fd0cf757a9a73e8f7c/days/day00_lora-quickstart/code/train_lora.py#L86-L90)
 ```python
 peft_cfg = LoraConfig(
     r=a.rank, lora_alpha=a.alpha, lora_dropout=0.05,
@@ -462,7 +462,7 @@ peft_cfg = LoraConfig(
 
 **第三步：训练参数和 Trainer。**
 
-[days/day00_lora-quickstart/code/train_lora.py](https://github.com/enkerewpo/tokens-to-torque/blob/main/days/day00_lora-quickstart/code/train_lora.py#L96-L120)
+[days/day00_lora-quickstart/code/train_lora.py](https://github.com/enkerewpo/tokens-to-torque/blob/b4212672415c0ac56b72f2fd0cf757a9a73e8f7c/days/day00_lora-quickstart/code/train_lora.py#L96-L120)
 ```python
 cfg = SFTConfig(output_dir=a.out, num_train_epochs=a.epochs,
                 per_device_train_batch_size=a.batch, gradient_accumulation_steps=2,
@@ -679,7 +679,7 @@ day 31 要回答的问题：这个 adapter 改了模型的什么？`r=16` 是多
 <!-- 参考文献用脚注 [^key] 写在这里，站点会自动汇总到文末的「参考文献」区 -->
 
 [^acc]: 在计算 loss 的那些位置上，模型概率最高的 token 恰好等于真实下一个 token 的比例。它比 loss 直观，但只看它会漏掉“对得很勉强”的情况，两个一起看。
-[^peftsrc]: PEFT 0.20.0 源码 `src/peft/tuners/tuners_utils.py` 的 `_maybe_include_all_linear_layers()`：[GitHub](https://github.com/huggingface/peft/blob/main/src/peft/tuners/tuners_utils.py)。判断依据是 `model.get_output_embeddings()`，注释原文 “ignore the last classification head for text generation models”。
+[^peftsrc]: PEFT 0.20.0 源码 `src/peft/tuners/tuners_utils.py` 的 `_maybe_include_all_linear_layers()`：[GitHub](https://github.com/huggingface/peft/blob/v0.20.0/src/peft/tuners/tuners_utils.py)。判断依据是 `model.get_output_embeddings()`，注释原文 “ignore the last classification head for text generation models”。
 [^lora]: Hu, E. J. et al. "LoRA: Low-Rank Adaptation of Large Language Models." [*ICLR* 2022](https://openreview.net/forum?id=nZeVKeeFYf9). [arXiv:2106.09685](https://arxiv.org/abs/2106.09685). §4.1 是 $\Delta W = BA$ 这个写法的出处，§7 是低秩假设的实验证据。
 [^aghajanyan]: Aghajanyan, A., Zettlemoyer, L. & Gupta, S. "Intrinsic Dimensionality Explains the Effectiveness of Language Model Fine-Tuning." [*ACL* 2021](https://aclanthology.org/2021.acl-long.568/). [arXiv:2012.13255](https://arxiv.org/abs/2012.13255).
 [^adam]: Loshchilov, I. & Hutter, F. "Decoupled Weight Decay Regularization." [*ICLR* 2019](https://openreview.net/forum?id=Bkg6RiCqY7). [arXiv:1711.05101](https://arxiv.org/abs/1711.05101)（AdamW；Adam 本身见 Kingma & Ba, [*ICLR* 2015](https://openreview.net/forum?id=8gmWwjFyLj), [arXiv:1412.6980](https://arxiv.org/abs/1412.6980)）。详细推导见[附录 B](../../appendix/optimizers.md)。

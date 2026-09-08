@@ -36,7 +36,7 @@ v1 引擎把工作分给两个进程。API 进程处理 HTTP、分词、按模�
   <img class="fig" alt="请求路径：文本进 API 进程分词，作为 Request 经 ZMQ 交给引擎；调度器给出这一步算谁、各几个 token、KV 块在哪；GPU 前向并采样；新 token 回到调度器继续，同时变回文本推给客户端" src="../../site_src/assets/fig-request-path-light.svg">
 </picture>
 
-三处值得注意。**跨进程只发生两次**：请求进去一次，输出回来一次，中间的调度和前向都在引擎进程里完成。**GPU 一步只被调用一次**，这一次里所有在跑的请求一起算，这就是批处理。**橙色那条回边是主循环**：请求没答完就再走一轮，所以生成 64 个 token 要走 65 轮。
+三处值得注意。**跨进程只发生两次**：请求进去一次，输出回来一次，中间的调度和前向都在引擎进程里完成。**GPU 一步只被调用一次**，这一次里所有在跑的请求一起算，这就是批处理。**橙色那条回边是主循环**：请求没答完就再走一轮。实测生成 64 个 token 正好走 64 步，见 §4。
 
 图上箭头只写了名字，各自装的内容如下：
 
@@ -100,9 +100,23 @@ def step(self) -> tuple[dict[int, EngineCoreOutputs], bool]:
 
 > There's no "decoding phase" nor "prefill phase" in the scheduler. Each request just has the `num_computed_tokens` and `num_tokens_with_spec`.
 
-每条请求带两个数：已经算过多少个 token，一共需要算到多少。调度器每一步的工作就是给各请求分配一些 token 配额，让前者追上后者。
+这两个数是理解调度器的关键。
 
-这个写法把几种情况统一了。刚到达的请求已算 0 个、需要算 20 个，于是这一步给它 20 个，这就是 prefill。已经在生成的请求每步只差 1 个，于是给它 1 个，这就是 decode。提示很长而配额不够时，这一步只给一部分，下一步继续，这就是分块预填充（chunked prefill）。三种情况在代码里是同一条路径。
+`num_computed_tokens` 是**这条请求已经算过的 token 数**。算过的意思是：它的 K、V 已经写进 KV cache，不用再算第二遍（[附录 D.8](../../appendix/transformer.md)）。请求刚到时这个数是 0。
+
+`num_tokens_with_spec` 是**当前手上一共有多少个 token**，等于提示长度加上已经生成的长度。注意它不是「用户要多少个 token」：模型每采样出一个新 token，这个数就加一。所以它是个会长的数，不是事先定好的目标。
+
+两数之差就是这一步还欠着的 token。调度器的工作就是给各请求分配配额，让前一个数追上后一个数：
+
+| 请求处在什么阶段 | 已算 | 手上共有 | 这一步分到 |
+|---|---|---|---|
+| 刚到达，提示 20 个 token | 0 | 20 | 20，一次算完 |
+| 已生成 5 个 token | 25 | 26 | 1 |
+| 提示很长，配额不够 | 0 | 4000 | 先给 2048，下一步再给剩下的 |
+
+第一行就是 prefill，第二行就是 decode，第三行是分块预填充（chunked prefill）。代码里没有为它们分三条路径，三种情况都是同一个减法。
+
+至于「用户要多少个 token」，那是 `max_tokens`，由 `update_from_output()` 在写回时检查，与调度无关。
 
 配额来自 `token_budget = self.max_num_scheduled_tokens`。调度器先遍历 `running` 队列，再从 `waiting` 队列取新请求，每分配一条就从预算里扣掉。预算耗尽或 KV 块不够时，这一轮就到此为止。
 
@@ -111,6 +125,36 @@ def step(self) -> tuple[dict[int, EngineCoreOutputs], bool]:
 从 `waiting` 取出一条请求，要先向 `KVCacheManager` 申请块（`allocate_slots`）。申请不到时，调度器不会让新请求插队，而是从 `running` 队列尾部往回抢占（`_preempt_request`）：把某条请求的块全部释放，状态改回 `PREEMPTED`，它之前算过的 token 作废，之后重新排队从头 prefill。
 
 被抢占的次数记在 `vllm:num_preemptions_total` 里。这个数不为零，说明 KV cache 相对负载太小，day 03 会把这条关系算清楚。
+
+**被抢占之后，之前算过的部分要重算吗？** 要。抢占的代码只有二十行，关键是最后两句：
+
+[vllm/v1/core/sched/scheduler.py](https://github.com/vllm-project/vllm/blob/v0.22.1/vllm/v1/core/sched/scheduler.py#L929-L949)
+```python
+def _preempt_request(self, request: Request, timestamp: float) -> None:
+    self.kv_cache_manager.free(request)
+    self.encoder_cache_manager.free(request)
+    request.status = RequestStatus.PREEMPTED
+    request.num_computed_tokens = 0
+    ...
+    self.waiting.prepend_request(request)
+```
+
+块被释放，`num_computed_tokens` 归零。所以一条提示 100 个 token、已经算了 50 个的请求被抢占后重新排到队首，回来时是从第 0 个 token 重新算的，那 50 个 token 的计算白做了。这就是抢占的代价，也是 `num_preemptions_total` 值得盯的原因。
+
+开了前缀缓存（prefix caching）时情况不同：释放的块如果还没被别人覆盖，重新调度时能按前缀命中拿回来，不用重算。本节的服务没有开这个功能，启动日志里是 `enable_prefix_caching=False`。day 11 专门做前缀缓存。
+
+**每生成一个 token，是不是要把前面所有 token 重新推一遍？** 不是，这正是 KV cache 存在的意义。生成第 $n$ 个 token 时，模型只对**一个位置**做前向：算这一个位置的 Q、K、V，然后拿它的 Q 去和缓存里前面 $n-1$ 个位置的 K、V 做注意力，算完再把这一个位置的 K、V 追加进缓存。
+
+所以一步的开销分两部分：
+
+| 这一步在算什么 | 随序列长度怎么变 |
+|---|---|
+| 各个线性层：一个位置的向量乘权重矩阵 | 不变。矩阵就那么大，读一遍权重的时间也不变 |
+| 注意力：一个查询对 $n-1$ 个缓存位置 | 线性增长 |
+
+短序列时第一部分占主导，所以每个 token 的耗时基本是常数，§4 量到的 token 间隔 10.9 ms 就是这个常数。序列长到几千以上，第二部分才开始显出来。累计起来，生成 $N$ 个 token 的注意力总量是 $O(N^2)$，但**每一步**不是。
+
+如果没有 KV cache，每步都要把前面所有位置重算一遍，那才是每步 $O(n)$ 个位置的完整前向，总量 $O(N^2)$ 次完整前向。两者差着一个模型前向的常数因子，day 03 会把这块缓存的大小算出来。
 
 ### 2.6 一条请求的状态机
 
@@ -188,7 +232,7 @@ python3 code/trace_one.py --url $U --model $MODEL --max-tokens 64
 
 核心是这几行：
 
-[days/day02_vllm-request-path/code/trace_one.py](https://github.com/enkerewpo/tokens-to-torque/blob/main/days/day02_vllm-request-path/code/trace_one.py#L35-L50)
+[days/day02_vllm-request-path/code/trace_one.py](https://github.com/enkerewpo/tokens-to-torque/blob/b4212672415c0ac56b72f2fd0cf757a9a73e8f7c/days/day02_vllm-request-path/code/trace_one.py#L35-L50)
 ```python
 def scrape(url):
     with urllib.request.urlopen(f"{url}/metrics", timeout=10) as r:
@@ -245,7 +289,23 @@ Jetson AGX Thor（120 W），vLLM 0.22.1（NGC `26.06-py3` 容器），Qwen3.5-0
 
 服务空闲时排队时间是 9 微秒，也就是从 `add_request` 到被下一轮 `schedule()` 选中的间隔。这个量级说明请求几乎是立刻进入批次的，主循环没有额外的等待窗口。decode 占了总时间的 96%，与 day 01 §2.3 的结论一致：生成越长，TPOT 越主导。
 
-`vllm:iteration_tokens_total` 的平均值是 **1.31 个 token**。这个数把 §2.4 说的调度模型验证了：一次 prefill 步处理 20 个 token，之后 64 步各处理 1 个，$(20 + 64) / 65 = 1.29$，与实测相符。引擎绝大多数步只算一个 token，这正是 decode 阶段受内存带宽限制的原因。
+### 步数和 token 数的关系
+
+`vllm:iteration_tokens_total` 这个直方图的次数就是引擎走过的步数，和值就是这些步一共处理了多少 token。同一条提示（20 个 token）只改 `max_tokens`，各跑一次：
+
+| `max_tokens` | 引擎步数 | 处理的 token 数 | 每步平均 |
+|---|---|---|---|
+| 1 | 1 | 21 | 21 |
+| 8 | 8 | 28 | 3.5 |
+| 16 | 16 | 36 | 2.25 |
+| 32 | 32 | 52 | 1.63 |
+| 64 | 64 | 84 | 1.31 |
+
+两条规律很干净：**步数等于生成的 token 数**，**处理的 token 数等于提示加生成**。
+
+第一行把第一步的账钉死了：只要一个 token 时，引擎只走一步，这一步处理 21 个 token。也就是说第一步一次算完整段提示，并在同一步里产出第一个 token。之后每一步只处理一个 token。所以生成 64 个 token 是 64 步，不是 65 步。
+
+每步平均随生成长度下降，趋向 1：生成越长，decode 步占比越高。这正是 §2.4 的调度模型，也是 decode 阶段受内存带宽限制的原因，一步只算一个 token，权重却要整个读一遍。
 
 ### 12 条请求撞上 8 个位置
 

@@ -149,7 +149,7 @@ vLLM 有两种用法：在 Python 进程内批量生成，或启动一个常驻�
 
 §3 使用在线服务。离线用法只需十几行，这是可运行的最小例子：
 
-[days/day01_vllm-first-serve/code/offline.py](https://github.com/enkerewpo/tokens-to-torque/blob/main/days/day01_vllm-first-serve/code/offline.py)
+[days/day01_vllm-first-serve/code/offline.py](https://github.com/enkerewpo/tokens-to-torque/blob/b4212672415c0ac56b72f2fd0cf757a9a73e8f7c/days/day01_vllm-first-serve/code/offline.py)
 ```python
 from vllm import LLM, SamplingParams
 
@@ -339,7 +339,7 @@ python3 code/latency.py --model Qwen/Qwen3.5-9B --runs 5
 
 脚本只用标准库，在宿主机上运行，不进入容器。核心部分如下：
 
-[days/day01_vllm-first-serve/code/latency.py](https://github.com/enkerewpo/tokens-to-torque/blob/main/days/day01_vllm-first-serve/code/latency.py#L18-L40)
+[days/day01_vllm-first-serve/code/latency.py](https://github.com/enkerewpo/tokens-to-torque/blob/b4212672415c0ac56b72f2fd0cf757a9a73e8f7c/days/day01_vllm-first-serve/code/latency.py#L18-L40)
 ```python
 req = urllib.request.Request(f"{url}/v1/chat/completions", data=body,
                              headers={"Content-Type": "application/json"})
@@ -395,7 +395,7 @@ bash code/ui.sh          # 在运行模型的机器上启动一个静态文件�
 
 浏览器端接收流的写法与上面的 Python 相同，只是换了 API：
 
-[days/day01_vllm-first-serve/code/ui/index.html](https://github.com/enkerewpo/tokens-to-torque/blob/main/days/day01_vllm-first-serve/code/ui/index.html)
+[days/day01_vllm-first-serve/code/ui/index.html](https://github.com/enkerewpo/tokens-to-torque/blob/b4212672415c0ac56b72f2fd0cf757a9a73e8f7c/days/day01_vllm-first-serve/code/ui/index.html)
 ```js
 const r = await fetch(state.url + "/v1/chat/completions", {
   method: "POST", headers: { "Content-Type": "application/json" },

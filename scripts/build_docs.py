@@ -144,8 +144,16 @@ def src_cards(text: str) -> str:
         if lines:
             parts.append(f'<span class="srccard-lines">第 {lines} 行</span>')
         parts.append(f'<a class="srccard-open" href="{url}">在 GitHub 打开</a></div>')
+        # 代码块加行号，起始值取链接里的行号，和 GitHub 上一一对应
+        code = m.group("code")
+        start = re.match(r"#L(\d+)", frag)
+        if start:
+            code = re.sub(r"^```([a-z]*)",
+                          lambda mm: '```{.%s .numberLines startFrom="%s"}'
+                                     % (mm.group(1) or "default", start.group(1)),
+                          code, count=1)
         return ('::: {.srccard}\n```{=html}\n' + "".join(parts) + "\n```\n\n"
-                + m.group("code") + "\n:::")
+                + code + "\n:::")
     return SRC_CARD.sub(wrap, text)
 
 
