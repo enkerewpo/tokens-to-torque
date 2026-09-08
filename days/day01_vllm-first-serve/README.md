@@ -479,7 +479,7 @@ vLLM 报告的 KV cache 容量：base 895 946 token，挂载 adapter 后 879 130
    关闭方法是在请求中加 `"chat_template_kwargs": {"enable_thinking": false}`。这不是 OpenAI 的官方字段，是 vLLM 的扩展。day 00 在代码中调用 `apply_chat_template(enable_thinking=False)`，到服务端换成这个入口。`code/ui/index.html` 默认关闭，可在设置中打开查看推理过程。
 3. **热身不止一次。** 前两次请求明显更慢（端到端 11.6 s、11.1 s），第三次起才稳定在 8.0 s。只热身一次就开始统计会把数字抬高 40%。day 05 做 benchmark 时专门处理这一点。
 4. **`TextIteratorStreamer` 返回的是文本块，不是 token。** 写 `baseline_hf.py` 时按块数计算 TPOT，得到 127 ms/token。改为从返回序列的长度统计真实 token 数之后是 101 ms/token，相差 25%。SSE 一侧有同样的问题（§3.5）。凡是用流式回调次数估计 token 速度的地方，都要先确认一次回调是否等于一个 token。
-5. **serving 必须另起一个容器。** `t2t` 是 pytorch 镜像，vLLM 在 Jetson 上要用 NGC 的 vllm 镜像，一个容器只能有一个镜像。约定和理由见 [SETUP](../../setup.md#为什么-serving-要另起一个容器)。
+5. **serving 必须另起一个容器。** `t2t` 是 pytorch 镜像，vLLM 在 Jetson 上要用 NGC 的 vllm 镜像，一个容器只能有一个镜像。约定和理由见 [SETUP](../../SETUP.md#为什么-serving-要另起一个容器)。
 6. **离线用法退出时打印一段 `UnicodeDecodeError` 的 traceback。** 结果此时已经输出完毕。这是 torch 在解释器退出阶段清理算子表时的报错，与用户代码无关。答案在 traceback 上方两屏处。
 7. **浏览器走系统代理时，页面打不开，只显示 502。** Clash 这类代理客户端会接管浏览器的请求，而代理连不到内网或 Tailscale 上的地址，于是返回 502。此时 `curl` 能通，因为 curl 默认不走系统代理。解决方法是把对应网段加入代理的绕过列表。家用内网一般是 `192.168.x.x`，Tailscale 分配的地址在 `100.64.x.x` 到 `100.127.x.x` 之间（CGNAT 网段），很多代理客户端的默认绕过规则不包含它。
 8. **`--gpu-memory-utilization` 在统一内存上划分的是整块内存**（§2.4）。这台机器上还运行着其他容器，比例过大会耗尽系统内存。

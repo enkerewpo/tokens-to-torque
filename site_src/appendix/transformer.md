@@ -4,7 +4,7 @@ title: "附录 D · Transformer 速查：从一串 token 到下一个 token"
 
 这一页把课表中反复出现的模型知识从头讲一遍：一个语言模型收到什么、输出什么，中间的 32 层在计算什么，以及推理时为什么需要 KV cache。运行 Day 00 不需要读这一页，那一天只需要知道“模型里有一组矩阵，LoRA 给每个矩阵挂一对小矩阵”。从 day 02 起，serving、CUDA、训练三条线都会回到这里。
 
-概念按依赖顺序排列：前一节是后一节的前提，从头读下来不会遇到没有定义过的词。所有具体数字都用课表中的模型（Qwen3.5-9B），与 [Day 00](../days/day00_lora-quickstart/README.md) 的实测一致。
+概念按依赖顺序排列：前一节是后一节的前提，从头读下来不会遇到没有定义过的词。所有具体数字都用课表中的模型（Qwen3.5-9B），与 [Day 00](../days/day00.md) 的实测一致。
 
 ## D.0 前置知识
 
@@ -39,7 +39,7 @@ $$
 \mathcal{L} = -\log p_y
 $$
 
-预测越准（$p_y$ 越接近 1），损失越接近 0；$p_y$ 接近 0 时损失趋于无穷。整条样本的损失是各位置损失的平均。[Day 00 §3.3](../days/day00_lora-quickstart/README.md) 中只在回答位置上计算损失的掩码，作用对象就是这个平均。
+预测越准（$p_y$ 越接近 1），损失越接近 0；$p_y$ 接近 0 时损失趋于无穷。整条样本的损失是各位置损失的平均。[Day 00 §3.3](../days/day00.md) 中只在回答位置上计算损失的掩码，作用对象就是这个平均。
 
 **推理。** 得到 $\mathbf{p}$ 之后按它采样（sampling）出下一个 token，接到输入末尾，再计算一次。每生成一个 token，整个模型就从头到尾运行一遍。这句话是后面所有性能讨论的起点。
 
@@ -372,7 +372,7 @@ $$
 
 $\mathbf{g}\in\mathbb{R}^d$ 是可学习的缩放向量，$\epsilon$ 防止除零。少一步减均值，省一点计算，效果基本不变。现在的大模型基本都用它。
 
-归一化放在模块之前还是之后（pre-norm / post-norm）影响很大。原论文是 post-norm，需要小心的学习率（learning rate）预热才能收敛。pre-norm 把归一化移到残差分支里面，训练稳定得多，现在几乎都用 pre-norm[^prenorm]。这就是 [Day 00 §2.9](../days/day00_lora-quickstart/README.md) 的块结构图中，归一化画在 mixer 和 FFN 前面的原因。
+归一化放在模块之前还是之后（pre-norm / post-norm）影响很大。原论文是 post-norm，需要小心的学习率（learning rate）预热才能收敛。pre-norm 把归一化移到残差分支里面，训练稳定得多，现在几乎都用 pre-norm[^prenorm]。这就是 [Day 00 §2.9](../days/day00.md) 的块结构图中，归一化画在 mixer 和 FFN 前面的原因。
 
 ## D.6 位置信息：RoPE
 
@@ -398,13 +398,13 @@ $$
 
 $W_{\text{lm\_head}}$ 是一个 $d \times V$ 的矩阵（Qwen3.5-9B 是 $4096 \times 248320$）。这一步做的事很简单：拿这个 4096 维向量和词表里每个词对应的一列做内积，得到 248320 个分数。分数高的词，就是模型认为接下来该出现的词。再按 D.1 的 softmax 变成概率、采样，就得到下一个 token。
 
-整条路径如下（对应 [Day 00 §2.9](../days/day00_lora-quickstart/README.md) 的主干图）：
+整条路径如下（对应 [Day 00 §2.9](../days/day00.md) 的主干图）：
 
 $$
 \text{token ids} \to \text{embedding} \to \underbrace{\text{块} \to \cdots \to \text{块}}_{32\ \text{层}} \to \text{RMSNorm} \to \text{lm\_head} \to \text{logits} \to \text{softmax} \to \text{采样}
 $$
 
-前面 $T-1$ 行的用途。推理时用不上，但训练时全都要用：第 $i$ 行的 logits 用来预测第 $i+1$ 个 token，一次前向就产生了 $T$ 个训练信号。这就是 [Day 00 §3.3](../days/day00_lora-quickstart/README.md) 的掩码是逐位置 0/1 数组的原因：它决定这 $T$ 个信号里哪些进入 loss。
+前面 $T-1$ 行的用途。推理时用不上，但训练时全都要用：第 $i$ 行的 logits 用来预测第 $i+1$ 个 token，一次前向就产生了 $T$ 个训练信号。这就是 [Day 00 §3.3](../days/day00.md) 的掩码是逐位置 0/1 数组的原因：它决定这 $T$ 个信号里哪些进入 loss。
 
 一个常见的误解：模型“一次想好整句话再输出”。实际上它每次只产生一个 token 的概率分布，采样出的 token 接到输入末尾，然后整条路径重新走一遍。聊天界面中逐字出现的效果，就是这个循环在运行，而不是打字机动画。
 

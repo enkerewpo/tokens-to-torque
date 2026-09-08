@@ -53,12 +53,13 @@ def rewrite_links(text: str, in_day: bool, in_sub: bool = None) -> str:
     if in_sub is None:
         in_sub = in_day
     up = "../" if in_sub else ""
-    text = re.sub(r"\]\((?:\.\./)*days/day(\d\d)_[a-z0-9-]+/(#[^)]*)?\)",
+    text = re.sub(r"\]\((?:\.\./)*days/day(\d\d)_[a-z0-9-]+/(?:README\.md)?(#[^)]*)?\)",
                   lambda m: f"]({'' if in_day else up + 'days/'}day{m.group(1)}.md{m.group(2) or ''})", text)
     text = re.sub(r"\]\((?:\.\./)*appendix/([a-z0-9-]+)\.md(#[^)]*)?\)",
                   lambda m: f"]({up}appendix/{m.group(1)}.md{m.group(2) or ''})", text)
     for src, dst in TOP.items():
-        text = re.sub(re.escape(f"]({src}") + r"(#[^)]*)?\)",
+        # 根目录那几篇：正文里可能写成 SETUP.md，也可能从 days/ 里写成 ../../SETUP.md
+        text = re.sub(r"\]\((?:\.\./)*" + re.escape(src) + r"(#[^)]*)?\)",
                       lambda m, d=dst: f"]({up}{d}{m.group(1) or ''})", text)
     text = re.sub(r"\]\((?:\.\./)*(common/[^)]*|templates/[^)]*|scripts/[^)]*|LICENSE)\)",
                   lambda m: f"]({GH}/{m.group(1)})", text)
@@ -139,6 +140,26 @@ def process(path: pathlib.Path, in_day: bool, daydir: str = "", in_sub: bool = N
     return title or path.stem, body
 
 
+
+def check_links(written: set[pathlib.Path]) -> int:
+    """生成完之后走一遍所有内部 .md 链接，指不到文件的当场报出来。
+
+    漏改一条链接不会让构建失败：Quarto 照样出页面，只是线上点开是 404。
+    day 01 §5 那条 SETUP 链接就是这么带上线的。
+    """
+    n = 0
+    for f in sorted(written):
+        for link in re.findall(r"\]\(([^)\s#]+\.md)(?:#[^)]*)?\)", f.read_text(encoding="utf-8")):
+            if link.startswith(("http://", "https://", "/")):
+                continue
+            if not (f.parent / link).resolve().exists():
+                print(f"  链接指不到文件：{f.relative_to(SRC)} -> {link}")
+                n += 1
+    if n:
+        print(f"  共 {n} 条坏链接，改 rewrite_links() 或改正文里的写法")
+    return n
+
+
 def main():
     # 注意：不要"先删光再重写"。quarto preview 在监听这些文件，
     # 删除到重写之间的空窗期会让它扫到文件消失并卡在 Render Error。
@@ -201,9 +222,12 @@ def main():
         if stale not in written:
             stale.unlink()
 
+    broken = check_links(written)
     print(f"site_src/ 生成完毕：{len(TOP)} 个顶层页 + {len(days)} 天 + {len(apps)} 个附录")
     for n, t in days:
         print(f"  day{n}  {t}")
+    if broken:
+        sys.exit(1)          # CI 在这里挡住坏链接，别等上线才发现
 
 
 if __name__ == "__main__":

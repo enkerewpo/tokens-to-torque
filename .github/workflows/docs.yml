@@ -3,6 +3,9 @@ name: docs
 on:
   push:
     branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 3 * * 1"        # 每周一查一次外链，链接会自己烂掉
   workflow_dispatch:
 
 permissions:
@@ -23,17 +26,49 @@ jobs:
         with:
           python-version: "3.12"
       - uses: quarto-dev/quarto-actions/setup@v2
-      # site_src/ 下的 markdown 是生成物，不进仓库，每次构建现生成
+      # site_src/ 下的 markdown 是生成物，不进仓库，每次构建现生成。
+      # 脚本自带站内链接自检，指不到文件就在这里失败。
       - run: python scripts/build_docs.py
+      - run: python scripts/check_footnotes.py
       - uses: quarto-dev/quarto-actions/render@v2
         with:
           path: site_src
+      # 站内链接和锚点：只查本地文件，不联网，所以稳定，可以挡住部署
+      - name: 检查站内链接与锚点
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: >-
+            --offline
+            --include-fragments
+            --no-progress
+            --root-dir "$GITHUB_WORKSPACE/site_src/_site"
+            "site_src/_site/**/*.html"
+          fail: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site_src/_site
 
+  # 外链单独一个任务：对方限流或临时抽风不该拦住部署
+  external-links:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 检查外部链接
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: >-
+            --no-progress
+            --max-retries 3
+            --retry-wait-time 10
+            --timeout 30
+            --accept 200..=299,403,429
+            --exclude "^https?://(localhost|127\.0\.0\.1|100\.6[4-9]\.|100\.[7-9][0-9]\.|100\.1[01][0-9]\.|100\.12[0-7]\.|192\.168\.)"
+            "**/*.md"
+          fail: true
+
   deploy:
     needs: build
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

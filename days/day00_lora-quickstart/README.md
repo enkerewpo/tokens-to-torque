@@ -345,7 +345,7 @@ thinking 是模板行为，不是模型的另一个开关。`enable_thinking=Tru
 
 ### 3.0 进容器（10 min）
 
-训练用的容器叫 `t2t`，建法见 [SETUP](../setup.md#项目容器)。已经建好时：
+训练用的容器叫 `t2t`，建法见 [SETUP](../../SETUP.md#项目容器)。已经建好时：
 
 ```bash
 sudo docker exec -it -w "$PWD" t2t bash    # 容器内外同路径，进去还在当前目录
