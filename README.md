@@ -6,7 +6,7 @@
 
 `serving` · `CUDA` · `training` · `VLM` · `VLA` · `WAM`
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) ![Progress](https://img.shields.io/badge/progress-2%2F73_days-76B900.svg) ![Hardware](https://img.shields.io/badge/hardware-Jetson%20%2F%20any%20CUDA%20GPU-76B900.svg) ![Started](https://img.shields.io/badge/started-2026--09--04-informational.svg)
+[![Stars](https://img.shields.io/github/stars/enkerewpo/tokens-to-torque?style=flat&color=76B900)](https://github.com/enkerewpo/tokens-to-torque/stargazers) [![Discussions](https://img.shields.io/github/discussions/enkerewpo/tokens-to-torque?style=flat&color=76B900)](https://github.com/enkerewpo/tokens-to-torque/discussions) [![Site](https://img.shields.io/badge/site-enkerewpo.github.io-informational.svg)](https://enkerewpo.github.io/tokens-to-torque/) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) ![Progress](https://img.shields.io/badge/progress-2%2F73_days-76B900.svg) ![Hardware](https://img.shields.io/badge/hardware-Jetson%20%2F%20any%20CUDA%20GPU-76B900.svg)
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="site_src/assets/hero-dark.svg">

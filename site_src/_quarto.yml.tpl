@@ -48,6 +48,22 @@ __DAYS__
       - section: 附录
         contents:
 __APPENDIX__
+  # 每页底部挂 GitHub Discussions 评论（giscus）。ID 是 GraphQL 查出来的，
+  # 分类用 Announcements：只有维护者能在那里开帖，giscus 才不会匹配到路人开的帖。
+  comments:
+    giscus:
+      repo: enkerewpo/tokens-to-torque
+      repo-id: R_kgDOUNy35Q
+      category: Announcements
+      category-id: DIC_kwDOUNy35c4DFIB2
+      mapping: pathname
+      reactions-enabled: true
+      input-position: top
+      loading: lazy
+      language: zh-CN
+      theme:
+        light: light
+        dark: dark_dimmed
   page-footer:
     left: "基于 [MIT 许可证](https://github.com/enkerewpo/tokens-to-torque/blob/main/LICENSE)发布 · 作者 [wheatfox](https://www.oscommunity.cn/)"
     right: "用 [Quarto](https://quarto.org) 构建，托管在 GitHub Pages"
