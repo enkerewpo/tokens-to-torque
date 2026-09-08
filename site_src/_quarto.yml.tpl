@@ -32,9 +32,9 @@ __DAYS_MENU__
 __APPENDIX_MENU__
       - text: 课表
         href: roadmap.md
-      - text: 环境
+      - text: 环境搭建
         href: setup.md
-      - text: 资源
+      - text: 精选材料
         href: resources.md
     right:
       - icon: github
