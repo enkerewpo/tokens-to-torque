@@ -117,6 +117,16 @@ python scripts/cn_punct.py      # 试运行；确认无误后加 --apply
 - **动手**一节要逐条命令、可复现，别人 clone 下来能跑
 - 数学要用 LaTeX（`$...$` / `$$...$$`），站点用 KaTeX 渲染，GitHub 也原生支持。**不要用表格糊弄矩阵运算**
 - 代码放 `code/`，README 里只贴关键的十几行
+- **贴源码时上面加一行指向 GitHub 的链接**，构建时会把「链接 + 代码块」包成一张卡片，站点上带文件名和跳转，GitHub 上就是个普通链接。行号必须核对过：
+
+  ```markdown
+  [vllm/v1/engine/core.py · L428](https://github.com/vllm-project/vllm/blob/v0.22.1/vllm/v1/engine/core.py#L428-L457)
+  ```python
+  def step(self) -> ...:
+  ```
+  ```
+
+  引上游代码要固定到 tag（不要用 `main`，行号会漂）。引本仓库的代码用 `blob/main` 加行号范围。
 - 用 Material 的提示框标重点：`!!! note` / `!!! warning` / `!!! danger` / `!!! tip`
 - 踩坑一节最有价值，别省
 

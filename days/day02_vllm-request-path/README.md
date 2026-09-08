@@ -23,9 +23,13 @@ day 03 到 day 06 都要改这个服务的行为：算 KV cache 占用、加并�
 
 ### 2.1 两个进程，一条 ZMQ 通道
 
-v1 引擎把工作分给两个进程。API 进程处理 HTTP、分词、拼 chat template、把生成的 token 变回文本；引擎进程只做一件事，循环调度和前向。两者之间用 ZMQ 传消息，消息体由 msgspec 编码。
+v1 引擎把工作分给两个进程。API 进程处理 HTTP、分词、按模型自带的 chat template 把对话拼成 token 序列（day 00 §2.10）、把生成的 token 变回文本；引擎进程只做一件事，循环调度和前向。
 
-分开的理由是 Python 的全局解释器锁。HTTP 解析、分词、SSE 编码都是 CPU 活，和引擎主循环放在同一个解释器里会互相抢锁，GPU 因此空等。分成两个进程后，引擎那一侧只剩下调度和前向。
+分开的理由是 Python 的**全局解释器锁**（global interpreter lock，简称 GIL）：同一个 Python 进程里，任意时刻只有一个线程在执行字节码。HTTP 解析、分词、把每个 token 编成一条 **SSE**（server-sent events，服务器推送事件，day 01 §3.5 用它测过 TTFT）都是 CPU 活，和引擎主循环放在同一个解释器里就会互相抢这把锁，GPU 因此空等。分成两个进程之后各有各的解释器和锁，引擎那一侧只剩下调度和前向。
+
+代价是两个进程之间要传消息，而且传得很频繁：每生成一个 token 都要回传一次。vLLM 用的是 **ZeroMQ**（简称 ZMQ）：一个消息传递库，提供请求应答、发布订阅这类通信模式，在同一台机器上走 Unix 域套接字或共享内存，不经过网络协议栈。选它而不是 Python 自带的 `multiprocessing.Queue`，是因为后者每条消息都要 pickle 一次，而 pickle 慢且不安全。消息的编码用的是 **msgspec**，一个按预先声明的结构做序列化的库，省掉了 pickle 的类型推断。
+
+这些细节今天不需要深究。要记住的是：**每个 token 都要跨一次进程边界**，所以这条通道的开销直接落在 §4 量到的 token 间隔上。
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../../site_src/assets/fig-request-path-dark.svg">
@@ -48,6 +52,7 @@ v1 引擎把工作分给两个进程。API 进程处理 HTTP、分词、拼 chat
 
 主循环的正体只有十几行，结构一目了然：
 
+[vllm/v1/engine/core.py · L428](https://github.com/vllm-project/vllm/blob/v0.22.1/vllm/v1/engine/core.py#L428-L457)
 ```python
 def step(self) -> tuple[dict[int, EngineCoreOutputs], bool]:
     if not self.scheduler.has_requests():
@@ -65,14 +70,14 @@ def step(self) -> tuple[dict[int, EngineCoreOutputs], bool]:
 三步各自的职责：
 
 1. `schedule()` 产出一个 `SchedulerOutput`：这一轮有哪些请求、每条算多少个 token、各自的 KV 块在哪。
-2. `execute_model()` 把这些信息交给 worker，做一次前向并采样。它先返回一个 future，中间那行 `get_grammar_bitmask` 就是趁 GPU 在算时做的 CPU 活。
+2. `execute_model()` 把这些信息交给 worker，也就是真正持有模型权重、在 GPU 上跑前向的那个进程。它先返回一个 future，即「结果还没算完，先给你一个凭证，用 `.result()` 去取」。中间那行 `get_grammar_bitmask` 就是趁 GPU 在算时做的 CPU 活，只有约束解码时才用得上。
 3. `update_from_output()` 把采样出的 token 追加到各条请求上，判断谁结束了，产出要发回 API 进程的输出。
 
 外层的 `run_busy_loop()` 只是反复调用 `step()`，并在没有请求时阻塞等待新请求。
 
 ### 2.4 调度器眼里没有 prefill 和 decode
 
-`Scheduler.schedule()` 开头的注释直接说明了它的模型：
+[vllm/v1/core/sched/scheduler.py · L331](https://github.com/vllm-project/vllm/blob/v0.22.1/vllm/v1/core/sched/scheduler.py#L329-L340) 开头的注释直接说明了它的模型：
 
 > There's no "decoding phase" nor "prefill phase" in the scheduler. Each request just has the `num_computed_tokens` and `num_tokens_with_spec`.
 
@@ -139,7 +144,7 @@ sudo docker cp t2t-vllm-day02:/usr/local/lib/python3.12/dist-packages/vllm/v1 ./
 
 ### 3.2 把一条请求拆成三段
 
-`code/trace_one.py` 发一条请求，在请求前后各抓一次 `/metrics`，相减得到这一条的值。vLLM 的指标是 Prometheus 格式的累计量：直方图给 `_sum` 和 `_count`，两次快照的差相除就是这一条请求的平均值。
+`code/trace_one.py` 发一条请求，在请求前后各抓一次 `/metrics`，相减得到这一条的值。vLLM 的指标按 **Prometheus** 的文本格式暴露：一行一个指标，值是进程启动以来的累计量，只增不减。其中一类叫**直方图**（histogram），它不存每次的原始值，只维护若干个区间的计数，外加一个总和 `_sum` 和一个总次数 `_count`。所以单条请求的值取不到，但两次快照的和之差除以次数之差，就是这期间那几条请求的平均值。只发一条请求时，这个平均值就是它本身。
 
 ```bash
 python3 code/trace_one.py --url http://localhost:8100 --model <模型名> --max-tokens 64
@@ -147,6 +152,7 @@ python3 code/trace_one.py --url http://localhost:8100 --model <模型名> --max-
 
 核心是这几行：
 
+[days/day02_vllm-request-path/code/trace_one.py · L35](https://github.com/enkerewpo/tokens-to-torque/blob/main/days/day02_vllm-request-path/code/trace_one.py#L35-L50)
 ```python
 def scrape(url):
     with urllib.request.urlopen(f"{url}/metrics", timeout=10) as r:

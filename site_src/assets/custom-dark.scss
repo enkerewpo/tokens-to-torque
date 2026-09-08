@@ -59,3 +59,23 @@ code:not(.sourceCode) {
 
 /* 页末的源文件链接：小字、灰色、和正文拉开距离 */
 .source-link { margin-top: 2.4rem; font-size: .86rem; opacity: .75; }
+
+/* 源码卡片：一行文件名 + 跳到 GitHub 的链接，下面是代码块 */
+.srccard {
+  border: 1px solid #3A404A;
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 1.2rem 0;
+}
+.srccard > p:first-child {
+  margin: 0;
+  padding: .45rem .8rem;
+  background: #2E333B;
+  border-bottom: 1px solid #3A404A;
+  font-family: $font-family-monospace;
+  font-size: .82rem;
+}
+.srccard > p:first-child a { color: #9BD62F; text-decoration: none; }
+.srccard > p:first-child a::after { content: " ↗"; opacity: .6; }
+.srccard > p:first-child a:hover { text-decoration: underline; }
+.srccard div.sourceCode, .srccard pre { margin: 0; border: 0; border-radius: 0; }

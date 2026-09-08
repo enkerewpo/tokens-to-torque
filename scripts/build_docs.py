@@ -117,6 +117,25 @@ def rewrite_links(text: str, in_day: bool, in_sub: bool = None) -> str:
     return text
 
 
+SRC_CARD = re.compile(
+    r"^\[(?P<label>[^\]]+)\]\((?P<url>https://github\.com/[^)\s]+)\)\s*\n"
+    r"(?P<code>```[a-z]*\n.*?\n```)", re.M | re.S)
+
+
+def src_cards(text: str) -> str:
+    """「一行 GitHub 链接 + 紧接着的代码块」包成一张源码卡片。
+
+    源文件里写成普通链接，GitHub 上就是一个可点的文件名；站点上由这里包成
+    带文件名和跳转的卡片。两边都不需要额外插件。
+    """
+    def wrap(m):
+        return (f'::: {{.srccard}}\n'
+                f'[{m.group("label")}]({m.group("url")}){{.srccard-head}}\n\n'
+                f'{m.group("code")}\n'
+                f':::')
+    return SRC_CARD.sub(wrap, text)
+
+
 def write(path: pathlib.Path, content: str, written: set) -> None:
     """内容没变就不写，避免 preview 反复重渲染。"""
     written.add(path)
@@ -147,7 +166,7 @@ def strip_h1(text: str):
 
 
 def process(path: pathlib.Path, in_day: bool, daydir: str = "", in_sub: bool = None) -> tuple[str, str]:
-    body = alerts_to_callouts(rewrite_links(path.read_text(), in_day, in_sub))
+    body = src_cards(alerts_to_callouts(rewrite_links(path.read_text(), in_day, in_sub)))
     if daydir:
         body = body.replace("DAYDIR", daydir)
     title, body = strip_h1(body)
