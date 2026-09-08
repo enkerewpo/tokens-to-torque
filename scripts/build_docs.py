@@ -106,6 +106,10 @@ def rewrite_links(text: str, in_day: bool, in_sub: bool = None) -> str:
     # 统一改成相对站点的 assets/…（子目录页面要加 ../）
     text = re.sub(r"\]\((?:\.\./)*site_src/(assets/[^)]*)\)",
                   lambda m: f"]({up}{m.group(1)})", text)
+    # 上面那条只管 markdown 的 ![]()。没走内联的 HTML 图片（比如 README 里的
+    # Robonix 标志，它是单色路径，不需要内联字体）在这里改 src / srcset。
+    text = re.sub(r'(srcset|src)="(?:\.\./)*site_src/(assets/[^"]+)"',
+                  lambda m: f'{m.group(1)}="{up}{m.group(2)}"', text)
     text = re.sub(r"\]\((results/[^)]*\.(?:png|jpg|jpeg|svg|gif))\)",
                   lambda m: f"](assets/DAYDIR/{m.group(1)})", text)
     text = re.sub(r"\]\((code/[^)]*|results/[^)]*)\)",
