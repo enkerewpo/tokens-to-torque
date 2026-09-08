@@ -31,10 +31,26 @@ v1 引擎把工作分给两个进程。API 进程处理 HTTP、分词、按模�
 
 这些细节今天不需要深究。要记住的是：**每个 token 都要跨一次进程边界**，所以这条通道的开销直接落在 §4 量到的 token 间隔上。
 
+下面这张图是动的：箭头上飞过的方块就是这一步交给下一个模块的东西，GPU 那一格在前向期间变亮。跟着看一遍，就知道一个 token 要经过哪些手。
+
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="../../site_src/assets/fig-request-path-dark.svg">
-  <img class="fig" alt="一个请求在 vLLM 里的路径：API 进程做分词和发送，EngineCore 进程里调度、执行、回写输出，两个进程之间用 ZMQ 传消息" src="../../site_src/assets/fig-request-path-light.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="../../site_src/assets/fig-engine-loop-dark.svg">
+  <img class="fig" alt="一条请求在 vLLM 引擎里的流动：文本进入 API 进程被分词，作为 Request 经 ZMQ 交给引擎；调度器产出这一步算谁、各算几个 token、KV 块在哪，交给 GPU 做一次前向并采样；新 token 一路回到调度器继续下一步，同时经 OutputProcessor 变回文本推给客户端" src="../../site_src/assets/fig-engine-loop-light.svg">
 </picture>
+
+几处值得注意。**跨进程只发生两次**：请求进去一次，输出回来一次，中间的调度和前向都在引擎进程里完成。**GPU 一步只被调用一次**，这一次里所有在跑的请求一起算，这就是批处理。**橙色那条回边是主循环**：请求没答完就再走一轮调度和前向，所以生成 128 个 token 就要点亮 GPU 128 次。
+
+图里各段传的东西：
+
+| 从 | 到 | 传的是什么 |
+|---|---|---|
+| 用户 | API 进程 | 一段文本，加上 `max_tokens`、`temperature` 这些采样参数 |
+| InputProcessor | EngineCoreClient | token id 序列，模板已经拼好 |
+| API 进程 | EngineCore 进程 | 一个 `Request`：token、采样参数、请求 id |
+| Scheduler | Worker | `SchedulerOutput`：这一步算哪些请求、各算几个 token、它们的 KV 块在哪 |
+| Worker | Scheduler | 采样出的新 token id |
+| EngineCore | API 进程 | `EngineCoreOutputs`：新 token、是否结束、结束原因 |
+| OutputProcessor | 用户 | 一小段文本 |
 
 ### 2.2 三个关键的类
 

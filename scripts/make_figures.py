@@ -833,75 +833,127 @@ def fig_paged(p):
                "块之间不必连续，相同前缀还能共享")
 
 
-# ------------------------------------------------ 一个请求在 vLLM 里走过的路
-def fig_request_path(p):
-    """左边是 API 进程，右边是 EngineCore 进程，中间那条虚线是进程边界。
+# ------------------------------------------------ 引擎主循环：数据流动画
+def fig_engine_loop(p):
+    """一条请求在引擎里流动的动画：模块之间传的是什么，GPU 什么时候在算。
 
-    每格两行：上行是类或步骤，下行是方法。类名写满一行会顶到框边，
-    _card 的两行排版正好留出左右各十几像素的余白。
+    动画只做一件事：让「传递」这个动作可见。每段箭头上飞过的方块就是这一步
+    交出去的东西，名字写在方块上。GPU 那一格在前向期间变亮，其余时间是暗的，
+    这样能看出每生成一个 token 都要让它算一次。
     """
-    W, H = 750, 560
+    W, H = 790, 560
+    T = 13.0                                   # 一轮的总时长
     b = [_defs(p)]
-    LX, RX, BW, BH = 20, 356, 296, 64
+    css = []
 
-    b.append(text(24, 30, "一个请求走过的对象", fs(W, 1.06), p["fg"], weight="700"))
-    b.append(text(24, 52, "左列在 API 进程里，右列在 EngineCore 进程里，两列之间走 ZMQ",
+    b.append(text(24, 30, "一条请求在引擎里的流动", fs(W, 1.06), p["fg"], weight="700"))
+    b.append(text(24, 52, "箭头上飞过的方块 = 这一步交给下一个模块的东西",
                   fs(W, .8), p["sub"]))
 
-    b.append(f'<path d="M{RX - 20} 70V{H - 20}" stroke="{p["line"]}" '
-             f'stroke-width="1.2" stroke-dasharray="6 5"/>')
-    b.append(text(LX, 88, "API 进程", fs(W, .8), p["sub"], cls="s"))
-    b.append(text(RX, 88, "EngineCore 进程", fs(W, .8), p["sub"], cls="s"))
+    # 两个进程的分区
+    b.append(f'<rect x="152" y="76" width="248" height="452" rx="10" fill="none" '
+             f'stroke="{p["line"]}" stroke-dasharray="6 5"/>')
+    b.append(f'<rect x="424" y="76" width="312" height="452" rx="10" fill="none" '
+             f'stroke="{p["line"]}" stroke-dasharray="6 5"/>')
+    b.append(text(162, 94, "API 进程", fs(W, .8), p["sub"], cls="s"))
+    b.append(text(434, 94, "EngineCore 进程", fs(W, .8), p["sub"], cls="s"))
 
-    left = [("HTTP", "POST /v1/chat/completions"),
-            ("AsyncLLM", "add_request()"),
-            ("InputProcessor", "文本 → token"),
-            ("EngineCoreClient", "经 ZMQ 发给引擎"),
-            ("OutputProcessor", "token → 文本"),
-            ("SSE", "逐块返回客户端")]
-    right = [("EngineCoreProc", "run_busy_loop()"),
-             ("Scheduler", "schedule()"),
-             ("Executor", "execute_model()"),
-             ("Scheduler", "update_from_output()")]
+    BW, BH = 216, 44
+    user = Rect(24, 250, 112, 56)
+    api_in = Rect(168, 110, BW, BH)
+    inp = Rect(168, 178, BW, BH)
+    client = Rect(168, 246, BW, BH)
+    outp = Rect(168, 386, BW, BH)
+    sse = Rect(168, 454, BW, BH)
+    sched = Rect(440, 178, 208, BH)
+    gpu = Rect(440, 268, 208, 74)
+    upd = Rect(440, 386, 208, BH)
 
-    lr, rr = [], []
-    y = 102
-    for i, (title, sub_) in enumerate(left):
-        r = Rect(LX, y, BW, BH)
-        lr.append(r)
-        b.append(_card(p, r, title, sub_, stroke=GREEN if i in (1, 3) else None))
-        y += BH + 14
-    y = 102 + BH + 14
-    for i, (title, sub_) in enumerate(right):
-        r = Rect(RX, y, BW, BH)
-        rr.append(r)
-        b.append(_card(p, r, title, sub_, stroke=GREEN if i == 1 else None))
-        y += BH + 14
+    b.append(_card(p, user, "用户", "prompt", mono=False))
+    b.append(_card(p, api_in, "/v1/chat/completions", "FastAPI"))
+    b.append(_card(p, inp, "InputProcessor", "分词 + chat template"))
+    b.append(_card(p, client, "EngineCoreClient", "序列化后经 ZMQ 发出"))
+    b.append(_card(p, sched, "Scheduler", "schedule()", stroke=GREEN))
+    b.append(_card(p, outp, "OutputProcessor", "token → 文本"))
+    b.append(_card(p, sse, "SSE", "逐块推给客户端"))
+    b.append(_card(p, upd, "Scheduler", "update_from_output()"))
 
-    for col in (lr, rr):
-        for a, c in zip(col, col[1:]):
-            b.append(f'<path d="M{a.cx} {a.bottom}V{c.top - 2}" stroke="{p["sub"]}" '
-                     f'stroke-width="1.5" marker-end="url(#qa)"/>')
+    # GPU：单独画，前向期间会变亮
+    b.append(box(gpu.x, gpu.y, gpu.w, gpu.h, p["dim"], p["line"], rx=8))
+    # 前向期间点亮：单独一层绿色，只动它的透明度和边框，不动底色
+    b.append(f'<rect class="gpu" x="{gpu.x}" y="{gpu.y}" width="{gpu.w}" height="{gpu.h}" '
+             f'rx="8" fill="{GREEN}" fill-opacity="0" stroke="{GREEN}" stroke-opacity="0" '
+             f'stroke-width="1.6"/>')
+    b.append(text(gpu.cx, gpu.y + 26, "Worker · GPU", fs(W), p["fg"], anchor="middle",
+                  weight="600", cls="m"))
+    b.append(text(gpu.cx, gpu.y + 48, "CUDA graph 重放一次前向", fs(W, .82), p["sub"],
+                  anchor="middle", cls="s"))
+    b.append(text(gpu.cx, gpu.y + 66, "再采样出下一个 token", fs(W, .82), p["sub"],
+                  anchor="middle", cls="s"))
+    css.append(f".gpu{{animation:gpuOn {T}s linear infinite}}"
+               "@keyframes gpuOn{0%,33%{fill-opacity:0;stroke-opacity:0}"
+               "35%,48%{fill-opacity:.13;stroke-opacity:1}"
+               "50%,100%{fill-opacity:0;stroke-opacity:0}}")
 
-    # 跨进程：请求过去，输出回来
-    b.append(f'<path d="M{lr[3].x + BW} {lr[3].cy}H{rr[0].x - 6}" stroke="{GREEN}" '
-             f'stroke-width="1.8" marker-end="url(#qa)"/>')
-    b.append(text((lr[3].x + BW + rr[0].x) / 2, lr[3].cy - 10, "请求",
-                  fs(W, .8), GREEN, anchor="middle", cls="s"))
-    b.append(f'<path d="M{rr[3].x - 6} {rr[3].cy}H{lr[4].x + BW}" stroke="{BLUE}" '
-             f'stroke-width="1.8" marker-end="url(#qa)"/>')
-    b.append(text((lr[4].x + BW + rr[3].x) / 2, rr[3].cy - 10, "输出",
-                  fs(W, .8), BLUE, anchor="middle", cls="s"))
+    def seg(x1, y1, x2, y2, color):
+        return (f'<path d="M{x1} {y1}L{x2} {y2}" stroke="{color}" stroke-width="1.7" '
+                f'fill="none" marker-end="url(#qa)"/>')
 
-    # 引擎主循环是个环：更新完回到调度
-    loop_x = rr[3].x + BW + 20
-    b.append(f'<path d="M{rr[3].x + BW} {rr[3].cy}H{loop_x}V{rr[1].cy}H{rr[1].x + BW + 6}" '
-             f'stroke="{AMBER}" stroke-width="1.6" fill="none" marker-end="url(#qa)"/>')
-    b.append(text(loop_x + 8, (rr[1].cy + rr[3].cy) / 2 + 4, "每步一轮",
-                  fs(W, .8), AMBER, cls="s"))
-    return svg(W, H, "".join(b), label=(
-        "一个请求在 vLLM 里的路径：API 进程做分词和发送，EngineCore 进程里"
-        "调度、执行、回写输出，两个进程之间用 ZMQ 传消息"))
+    b.append(seg(user.x + user.w, user.cy - 30, api_in.x - 8, api_in.cy, p["sub"]))       # 用户 → 接口
+    b.append(seg(api_in.cx, api_in.bottom, api_in.cx, inp.top - 4, p["sub"]))
+    b.append(seg(inp.cx, inp.bottom, inp.cx, client.top - 4, p["sub"]))
+    b.append(seg(client.x + client.w, client.cy, sched.x - 8, sched.cy, GREEN))  # 跨进程
+    b.append(seg(sched.cx, sched.bottom, sched.cx, gpu.top - 4, GREEN))
+    b.append(seg(gpu.cx, gpu.bottom, gpu.cx, upd.top - 4, BLUE))
+    b.append(seg(upd.x, upd.cy, outp.x + outp.w + 8, outp.cy, BLUE))            # 回到 API 进程
+    b.append(seg(outp.cx, outp.bottom, outp.cx, sse.top - 4, p["sub"]))
+    b.append(seg(sse.x, sse.cy, user.cx, sse.cy, p["sub"]))                     # → 用户
+    b.append(seg(user.cx, sse.cy - 6, user.cx, user.bottom + 8, p["sub"]))
+
+    # 主循环：更新完回到调度
+    loop_x = gpu.x + gpu.w + 34
+    b.append(f'<path d="M{upd.x + upd.w} {upd.cy}H{loop_x}V{sched.cy}H{sched.x + sched.w + 6}" '
+             f'stroke="{AMBER}" stroke-width="1.7" fill="none" marker-end="url(#qa)"/>')
+    b.append(text(loop_x + 7, (sched.cy + upd.cy) / 2 - 7, "没答完", fs(W, .8), AMBER, cls="s"))
+    b.append(text(loop_x + 7, (sched.cy + upd.cy) / 2 + 11, "再来一步", fs(W, .8), AMBER, cls="s"))
+
+    # 飞过的数据块：(标签, 起点, 终点, 颜色, 出现时刻, 持续)
+    chips = [
+        ("文本", (user.x + user.w + 4, user.cy - 30), (api_in.x - 10, api_in.cy), p["sub"], 0.0, 1.3),
+        ("token ids", (inp.cx, inp.bottom + 4), (inp.cx, client.top - 6), BLUE, 1.5, 1.3),
+        ("Request", (client.x + client.w + 4, client.cy), (sched.x - 8, sched.cy), GREEN, 3.0, 1.3),
+        ("SchedulerOutput：算谁 · 各几个 token · KV 块表",
+         (sched.cx, sched.bottom + 4), (sched.cx, gpu.top - 6), GREEN, 4.5, 1.3),
+        ("新 token 的 id", (gpu.cx, gpu.bottom + 4), (gpu.cx, upd.top - 6), BLUE, 6.4, 1.3),
+        ("EngineCoreOutputs", (upd.x - 4, upd.cy), (outp.x + outp.w + 8, outp.cy), BLUE, 8.0, 1.3),
+        ("一小段文本", (sse.x - 4, sse.cy), (user.cx + 40, sse.cy), p["sub"], 9.6, 1.3),
+    ]
+    for i, (label, (x1, y1), (x2, y2), color, t0, dur) in enumerate(chips):
+        w = max(66, len(label) * (5.6 if any(c > "\u4e00" for c in label) else 4.2) + 18)
+        b.append(f'<g class="chip c{i}">'
+                 f'<rect x="{-w / 2:.1f}" y="-11" width="{w:.1f}" height="22" rx="5" '
+                 f'fill="{color}" fill-opacity=".14" stroke="{color}" stroke-width="1"/>'
+                 + text(0, 5, label, fs(W, .76), color, anchor="middle", cls="s") +
+                 "</g>")
+        a0, a1 = t0 / T * 100, (t0 + dur) / T * 100
+        css.append(
+            f"@keyframes c{i}{{"
+            f"0%,{a0:.3f}%{{opacity:0;transform:translate({x1:.1f}px,{y1:.1f}px)}}"
+            f"{a0 + .3:.3f}%{{opacity:1;transform:translate({x1:.1f}px,{y1:.1f}px)}}"
+            f"{a1 - .3:.3f}%{{opacity:1;transform:translate({x2:.1f}px,{y2:.1f}px)}}"
+            f"{a1:.3f}%,100%{{opacity:0;transform:translate({x2:.1f}px,{y2:.1f}px)}}}}"
+            f".c{i}{{animation:c{i} {T}s linear infinite}}")
+
+    # 不跑动画的渲染器（GitHub 缩略图、rsvg）里 transform 不生效，
+    # 全部叠在原点会糊成一团，所以默认全部隐藏，动画负责显示。
+    css.append(".chip{opacity:0}")
+    css.append("@media (prefers-reduced-motion: reduce){"
+               ".chip,.gpu{animation:none}.chip{opacity:1}}")
+    return svg(W, H, "".join(b), css="".join(css), label=(
+        "一条请求在 vLLM 引擎里的流动：文本进入 API 进程被分词，作为 Request 经 ZMQ "
+        "交给引擎；调度器产出这一步算谁、各算几个 token、KV 块在哪，交给 GPU 做一次"
+        "前向并采样；新 token 一路回到调度器继续下一步，同时经 OutputProcessor 变回"
+        "文本推给客户端"))
 
 
 def main():
@@ -916,7 +968,7 @@ def main():
                      "fig-multihead-shapes": fig_multihead_shapes,
                      "fig-batching": fig_batching,
                      "fig-paged": fig_paged,
-                     "fig-request-path": fig_request_path}.items():
+                     "fig-engine-loop": fig_engine_loop}.items():
         for suffix, pal in (("light", LIGHT), ("dark", DARK)):
             (OUT / f"{name}-{suffix}.svg").write_text(fn(pal))
         print(f"  {name}  {(OUT / f'{name}-light.svg').stat().st_size} 字节")
