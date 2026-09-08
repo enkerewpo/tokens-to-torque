@@ -28,6 +28,9 @@ figure:has(.hero) figcaption { display: none; }
   padding-block: .45rem;
 }
 .navbar-brand-container { gap: .6rem; }
+/* 方标和站名各自的行盒高度不同，不显式居中的话文字会低 2 到 3 px */
+.navbar .navbar-brand { display: flex; align-items: center; }
+.navbar .navbar-title { line-height: 1; }
 .navbar-logo { height: 26px; width: 26px; max-height: 26px; border-radius: 7px; }
 .navbar-title {
   font-family: $font-family-monospace;

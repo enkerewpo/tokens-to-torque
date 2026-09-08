@@ -133,7 +133,7 @@ bash common/jetson_watchdog.sh '<进程正则>' 85 &      # >=85C 自动优雅�
 bash common/jetson_stop.sh '<进程正则>'               # 要停的时候
 ```
 
-**绝不**：改功耗/温度限制、对碰 `/dev/nvidia*` 的进程用 `kill -9`、重启、开 persistence mode、跑没有上界的 job。完整规程见 [SETUP.md](SETUP.md#thor-安全)。
+**绝不**：改功耗/温度限制、对碰 `/dev/nvidia*` 的进程用 `kill -9`、重启、开 persistence mode、跑没有上界的 job。完整规程见 [SETUP.md](SETUP.md#jetson-安全)。
 
 ## 文档站
 

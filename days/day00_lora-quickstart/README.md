@@ -511,7 +511,7 @@ python code/train_lora.py \
     --epochs 3 --rank 16 --batch 4 --lr 1e-4
 ```
 
-模型选型和 wheel 版本以 [Jetson AI Lab «Fine-tune LLMs on Jetson»](https://www.jetson-ai-lab.com/tutorials/finetune-on-jetson/) 为准。那篇给出了 Thor 上验证过的 Full SFT (4B) / LoRA (9B) / QLoRA (27B) 三档配置。本仓库的脚本是通用的 TRL + PEFT 写法，具体版本 pin 见 [踩坑](#5-踩坑)。
+模型选型和 wheel 版本以 [Jetson AI Lab «Fine-tune LLMs on Jetson»](https://www.jetson-ai-lab.com/tutorials/finetune-on-jetson/) 为准。那篇给出了 Thor 上验证过的 Full SFT (4B) / LoRA (9B) / QLoRA (27B) 三档配置。本仓库的脚本是通用的 TRL + PEFT 写法，具体版本 pin 见 §5。
 
 ### 3.5 对比（20 min）
 

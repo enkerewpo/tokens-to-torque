@@ -176,9 +176,9 @@ def main():
         # 首页的居中横幅在 Quarto 里由 frontmatter 接管，去掉原来的 <div>
         if dst == "index.md":
             body = re.sub(r'<div align="center">\n(.*?)\n</div>', r"\1", body, flags=re.S)
-            # 徽章和「在线阅读」那行是给 GitHub 首页的，站点上是自指，删掉
+            # 「在线阅读」那行在站点上是指向本站，删掉；徽章保留
             body = "\n".join(l for l in body.split("\n")
-                             if "img.shields.io" not in l and not l.startswith("**在线阅读："))
+                             if not l.startswith("**在线阅读："))
         write(SRC / dst, frontmatter(title) + body, written)
 
     days = []

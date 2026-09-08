@@ -63,7 +63,12 @@ jobs:
             --timeout 30
             --accept 200..=299,403,429
             --exclude "^https?://(localhost|127\.0\.0\.1|100\.6[4-9]\.|100\.[7-9][0-9]\.|100\.1[01][0-9]\.|100\.12[0-7]\.|192\.168\.)"
-            "**/*.md"
+            --exclude "github\.com/.*/(stargazers|discussions)$"
+            --exclude-path site_src
+            "*.md"
+            "days/**/*.md"
+            "appendix/**/*.md"
+            "templates/**/*.md"
           fail: true
 
   deploy:
