@@ -23,7 +23,7 @@
 
 ## 2. 背景
 
-### 2.1 `d_in` / `d_out` 是什么
+### 2.1 线性层与 `d_in`、`d_out`
 
 Transformer 中绝大部分参数都在**线性层**里。线性层就是一次矩阵乘法：
 
@@ -49,7 +49,7 @@ $$
 
 微调就是修改这些 $W$。记改动量为 $\Delta W$，最终权重是 $W + \Delta W$。
 
-### 2.2 LoRA 怎么表示 $\Delta W$：拆成 $BA$
+### 2.2 低秩分解 $\Delta W = BA$
 
 微调要学的是改动量 $\Delta W\in\mathbb{R}^{d_{\text{out}}\times d_{\text{in}}}$。全参微调把它的每个元素都当作自由参数，一个 $4096\times4096$ 的矩阵就是 1678 万个可训练参数。LoRA[^lora] 不直接学 $\Delta W$，而是把它约束成两个小矩阵的乘积（论文 §4.1）：
 
@@ -83,7 +83,7 @@ $W_0$ 冻结不动，只训练 $A$ 和 $B$。前向变成 $\mathbf{y} = W_0\math
 
 “秩不超过 $r$ 就一定能拆成 $BA$”的证明、SVD 给出的显式分解、以及用奇异值曲线量化“近似低秩”，见[附录 A.12](../../appendix/linear-algebra.md#a.12-秩分解定理与-svd)。运行 LoRA 不需要这些，day 31 做 $\Delta W$ 的 SVD 实验时会用到。
 
-### 2.3 参数量：省在哪，什么时候不省
+### 2.3 参数量的节省与临界点
 
 | | 参数量 | $4096\times4096,\ r=16$ |
 |---|---|---|
@@ -103,7 +103,7 @@ $$
 
 反过来，$r$ 太小时 $A$、$B$ 容纳不了足够的信息，效果会下降。因此 $r$ 是在“能学到多少”和“占多少显存”之间的取舍，不是越小越好。day 31 用实验找这个平衡点。
 
-### 2.4 真正省的是优化器状态
+### 2.4 优化器状态与显存占用
 
 参数量省 99% 只是表面。训练时显存的大头不是参数，而是每个可训练参数背后的一组状态。下面先说明这组状态是什么。
 
@@ -170,7 +170,7 @@ bf16 副本可以随时从正本重新生成，fp32 正本才是被训练的对�
 >
 > 梯度仍然要穿过整个网络才能到达 $A$、$B$，中间激活值照样要保存。因此 `gradient_checkpointing` 仍需开启。LoRA 省的是状态，不是算力。
 
-### 2.5 两个必须知道的实现细节
+### 2.5 两个实现细节：初始化与 alpha
 
 初始化必须一零一随机：$A\sim\mathcal{N}(0,\sigma^2)$，$B = 0$。
 
@@ -193,7 +193,7 @@ $$
 
 $r$ 变大时 $BA$ 的数值幅度大致随之变大，除以 $r$ 把尺度稳住。这样改 $r$ 之后不必重新调整学习率（LoRA 论文的原话是 reduces the need to retune，不是完全免除）。$\alpha$ 才是真正的强度旋钮，习惯取 $\alpha = 2r$。本节用 $r=16,\ \alpha=32$。
 
-### 2.6 推理时零开销
+### 2.6 合并回权重：推理零开销
 
 训练完成后可以把 adapter 合并回去：
 
@@ -209,7 +209,7 @@ SFT 数据是一组（user 说什么，assistant 回什么）对。关键在于�
 
 另一个细节本节默认开启，day 33 详细讲：`assistant_only_loss=True` 表示只对 assistant 的 token 计算 loss。否则模型会去学那些合成的 instruction 模板。
 
-### 2.8 为什么几百条就够
+### 2.8 所需的数据量
 
 这里不是在教新知识（那需要几十万条），只是在改说话风格：用词习惯、句子长度、语气词、起头收尾。风格是很浅的模式。
 
@@ -380,7 +380,7 @@ python code/make_demo_dataset.py   # -> data/persona_demo.jsonl，169 条
 
 先用注入的风格而不是真实语料，原因是真实语料的风格很浅（用词习惯、句子长度），微调后很难判断学没学到，容易自我欺骗。注入一组能数出来的标记，“有没有效果”就变成一个数字。这条链路跑通后，再换成自己的语料（见 §6）。
 
-### 3.2 看一眼数据（5 min）
+### 3.2 检查数据（5 min）
 
 ```bash
 python code/peek.py data/persona_demo.jsonl -n 3
@@ -388,7 +388,7 @@ python code/peek.py data/persona_demo.jsonl -n 3
 
 这一步不要省略。数据里有什么，模型就学什么；数据里没有的，训一万步也不会有。
 
-### 3.3 训练脚本在做什么（先读，再跑）
+### 3.3 训练脚本的四个部分
 
 `code/train_lora.py` 不到 120 行，核心是四段。四个库各管一件事：
 
@@ -522,7 +522,7 @@ python code/compare.py \
     --out private/before_after.md
 ```
 
-### 3.6 度量风格命中率与知识保持
+### 3.6 度量风格命中率与知识保持（10 min）
 
 ```bash
 python code/measure_style.py --model Qwen/Qwen3.5-9B --adapter private/adapter --prompts code/prompts.txt
@@ -575,7 +575,7 @@ def stop_ids(tok):
 
 两个参数都在 §2.10 讲过：`add_generation_prompt=True` 补上 `<|im_start|>assistant`，`enable_thinking=False` 让模板把空思考段写完。`stop_ids` 要显式传给 `generate(eos_token_id=...)`。不传，模型说完一轮会继续编下一轮的 user 发言。
 
-### 3.8 和它聊天
+### 3.8 对话
 
 ```bash
 python code/chat.py --model Qwen/Qwen3.5-9B --adapter private/adapter
@@ -624,7 +624,7 @@ Jetson AGX Thor（120 W），Qwen3.5-9B bf16，LoRA r=16、α=32、`all-linear`�
 
 没有 system prompt，没有“请用可爱语气回答”这类指令，没有 few-shot 示例。两次生成唯一的差别是 `model.disable_adapter()` 开还是关，即那 43 M 个 LoRA 参数是否加入。`chat.py` 里的 `/base` 和 `/lora` 切换同理，可自行验证。
 
-### 换学习率：这份数据上三档都学得会
+### 学习率对比
 
 同一份数据、同样 3 epoch，只改学习率各训一次，再用同一批问题测一遍：
 

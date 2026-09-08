@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="tokens to torque">
+  <!-- 导航栏左上角的标记：和 favicon 同一个形状，深浅两色主题共用一份。 -->
+  <rect width="64" height="64" rx="16" fill="#76B900"/>
+  <g stroke="#12200A" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M16 32h28"/>
+    <path d="M34 22l10 10-10 10"/>
+  </g>
+</svg>

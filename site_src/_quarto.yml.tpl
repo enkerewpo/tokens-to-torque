@@ -20,18 +20,20 @@ website:
     location: navbar
     type: overlay
   navbar:
-    logo: assets/logo-light.svg
+    # 左上角是「方标 + 站名」，不再用整幅字标：首页的大标题和 hero 图已经写了
+    # 一遍站名，字标是第三遍。方标和 favicon 同形，标签页和导航栏能对上。
+    logo: assets/mark.svg
     logo-alt: "tokens to torque"
-    title: false
+    title: "tokens → torque"
     left:
       - text: 教程
         menu:
 __DAYS_MENU__
+      - text: 课表
+        href: roadmap.md
       - text: 附录
         menu:
 __APPENDIX_MENU__
-      - text: 课表
-        href: roadmap.md
       - text: 环境搭建
         href: setup.md
       - text: 精选材料

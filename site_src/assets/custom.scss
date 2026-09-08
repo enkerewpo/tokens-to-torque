@@ -27,7 +27,7 @@ figure:has(.hero) figcaption { display: none; }
   padding-block: .45rem;
 }
 .navbar-brand-container { gap: .6rem; }
-.navbar-logo { height: 24px; width: auto; max-height: 24px; }
+.navbar-logo { height: 26px; width: 26px; max-height: 26px; border-radius: 7px; }
 /* 站名：等宽小写 + 收紧字距，箭头用绿色点出来 */
 .navbar-title {
   font-family: $font-family-monospace;

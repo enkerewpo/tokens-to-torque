@@ -14,7 +14,7 @@ figure:has(.fig) { margin: 0; }
 figure:has(.fig) figcaption { display: none; }
 
 /* <img> 里的 SVG 不继承页面颜色，深色主题直接换一张图 */
-.quarto-dark .navbar-logo, body.quarto-dark .navbar-logo { content: url("assets/logo-dark.svg"); }
+/* 方标是纯绿色块，深浅两色主题共用，不再换图 */
 
 .hero { display: block; width: 100%; max-width: 980px; height: auto; margin: .25rem auto 1.75rem; }
 figure:has(.hero) { margin: 0; }
@@ -28,7 +28,7 @@ figure:has(.hero) figcaption { display: none; }
   padding-block: .45rem;
 }
 .navbar-brand-container { gap: .6rem; }
-.navbar-logo { height: 24px; width: auto; max-height: 24px; }
+.navbar-logo { height: 26px; width: 26px; max-height: 26px; border-radius: 7px; }
 .navbar-title {
   font-family: $font-family-monospace;
   font-weight: 600; font-size: 1.02rem; letter-spacing: -.015em; color: #E8E8E8;

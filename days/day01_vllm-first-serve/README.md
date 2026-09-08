@@ -22,7 +22,7 @@ day 00 的 `chat.py` 每次运行都要重新加载 18 GB 权重，耗时约 40 
 
 ## 2. 背景
 
-### 2.1 一次 `generate` 和一个服务的区别
+### 2.1 一次 `generate` 与一个服务的区别
 
 day 00 的脚本按顺序做四件事：启动进程、加载权重、回答一个问题、退出。其中加载权重约 40 秒，回答约几秒。
 
@@ -94,7 +94,7 @@ Thor 采用**统一内存**（unified memory）：CPU 和 GPU 共用同一块 12
 
 vLLM 取得这块内存后，先放权重，其余全部分配给 KV cache。启动日志因此会打印一行 KV cache 可容纳的 token 数。这个数决定了服务能同时处理的请求长度和数量，day 03 用公式计算它。
 
-### 2.5 vLLM 比直接 `generate` 快在哪里
+### 2.5 vLLM 的四项加速来源
 
 §4 的测量结果：单请求快 1.6 倍，首 token 快 3.3 倍。原因有四项。前三项是 serving 引擎的核心机制，第四项与 serving 无关。
 
@@ -433,7 +433,7 @@ Jetson AGX Thor（120 W），vLLM 0.22.1（NGC `26.06-py3` 容器），Qwen3.5-9
 | base | 80.8 ms | 62.0 ms | 16.1 token/s | 7.96 s |
 | base + day00 adapter | 89.9 ms | 72.9 ms | 13.7 token/s | 9.35 s |
 
-### 与不用 serving 引擎的对比
+### 与 `transformers.generate` 的对比
 
 同一台机器、同一个模型、同一个问题，用 day 00 的方式（`transformers.generate`，`code/baseline_hf.py`）作为对照：
 
