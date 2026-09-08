@@ -118,21 +118,34 @@ def rewrite_links(text: str, in_day: bool, in_sub: bool = None) -> str:
 
 
 SRC_CARD = re.compile(
-    r"^\[(?P<label>[^\]]+)\]\((?P<url>https://github\.com/[^)\s]+)\)\s*\n"
+    r"^\[(?P<label>[^\]]+)\]\((?P<url>https://github\.com/(?P<slug>[^)\s#]+)(?P<frag>#L[\d-]+L?\d*)?)\)\s*\n"
     r"(?P<code>```[a-z]*\n.*?\n```)", re.M | re.S)
+
+# GitHub 的标记存在 assets/github-mark.svg 里，构建时读进来内联。
+# 不写在这个文件里：SVG 的路径数据全是「数字加点」，会被隐私钩子当成 IP 拦下。
+GH_MARK = (SRC / "assets" / "github-mark.svg").read_text(encoding="utf-8").strip()
 
 
 def src_cards(text: str) -> str:
     """「一行 GitHub 链接 + 紧接着的代码块」包成一张源码卡片。
 
     源文件里写成普通链接，GitHub 上就是一个可点的文件名；站点上由这里包成
-    带文件名和跳转的卡片。两边都不需要额外插件。
+    带图标、路径和行号的卡片。两边都不需要额外插件。
     """
     def wrap(m):
-        return (f'::: {{.srccard}}\n'
-                f'[{m.group("label")}]({m.group("url")}){{.srccard-head}}\n\n'
-                f'{m.group("code")}\n'
-                f':::')
+        label, url, frag = m.group("label"), m.group("url"), m.group("frag") or ""
+        head, _, name = label.rpartition("/")
+        lines = frag.lstrip("#").replace("L", "").replace("-", " 到 ") if frag else ""
+        parts = [f'<div class="srccard-head">{GH_MARK}',
+                 f'<a class="srccard-path" href="{url}">']
+        if head:
+            parts.append(f'<span class="srccard-dir">{head}/</span>')
+        parts.append(f'<span class="srccard-file">{name}</span></a>')
+        if lines:
+            parts.append(f'<span class="srccard-lines">第 {lines} 行</span>')
+        parts.append(f'<a class="srccard-open" href="{url}">在 GitHub 打开</a></div>')
+        return ('::: {.srccard}\n```{=html}\n' + "".join(parts) + "\n```\n\n"
+                + m.group("code") + "\n:::")
     return SRC_CARD.sub(wrap, text)
 
 

@@ -407,7 +407,7 @@ python code/peek.py data/persona_demo.jsonl -n 3
 
 构造这个数组只需要知道提问占了前多少个 token。做法是两段分别转换，再首尾相接：
 
-[days/day00_lora-quickstart/code/train_lora.py · L66](https://github.com/enkerewpo/tokens-to-torque/blob/main/days/day00_lora-quickstart/code/train_lora.py#L66-L74)
+[days/day00_lora-quickstart/code/train_lora.py](https://github.com/enkerewpo/tokens-to-torque/blob/main/days/day00_lora-quickstart/code/train_lora.py#L66-L74)
 ```python
 def encode(r):
     prompt_txt = tok.apply_chat_template(r["messages"][:-1], add_generation_prompt=True,
@@ -440,7 +440,7 @@ python code/peek_tokens.py --model Qwen/Qwen3.5-9B
 
 **第二步：告诉 PEFT 把 LoRA 插在哪。**
 
-[days/day00_lora-quickstart/code/train_lora.py · L86](https://github.com/enkerewpo/tokens-to-torque/blob/main/days/day00_lora-quickstart/code/train_lora.py#L86-L90)
+[days/day00_lora-quickstart/code/train_lora.py](https://github.com/enkerewpo/tokens-to-torque/blob/main/days/day00_lora-quickstart/code/train_lora.py#L86-L90)
 ```python
 peft_cfg = LoraConfig(
     r=a.rank, lora_alpha=a.alpha, lora_dropout=0.05,
@@ -462,7 +462,7 @@ peft_cfg = LoraConfig(
 
 **第三步：训练参数和 Trainer。**
 
-[days/day00_lora-quickstart/code/train_lora.py · L96](https://github.com/enkerewpo/tokens-to-torque/blob/main/days/day00_lora-quickstart/code/train_lora.py#L96-L120)
+[days/day00_lora-quickstart/code/train_lora.py](https://github.com/enkerewpo/tokens-to-torque/blob/main/days/day00_lora-quickstart/code/train_lora.py#L96-L120)
 ```python
 cfg = SFTConfig(output_dir=a.out, num_train_epochs=a.epochs,
                 per_device_train_batch_size=a.batch, gradient_accumulation_steps=2,

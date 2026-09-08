@@ -287,10 +287,10 @@ vllm serve Qwen/Qwen3.5-9B \
 | `--max-lora-rank` | 允许的最大秩，必须不小于 adapter 的 $r$（day 00 用的是 16）。默认为 16，取值限于 1/8/16/32/64/128/256/320/512 |
 | `--max-loras` | 一个批次中同时使用的 adapter 数量上限，默认 1。挂载三个 adapter 而此值为 1 时，使用不同 adapter 的请求只能分到不同批次 |
 
-启动命令：
+启动命令。`LORA` 填 day 00 训练输出的目录，也就是 `trainer.save_model()` 写出 `adapter_config.json` 和 `adapter_model.safetensors` 的那个；`LORA_NAME` 是你给它起的名字，请求里的 `model` 字段填它：
 
 ```bash
-LORA=<adapter 目录> LORA_NAME=day00-demo bash code/serve.sh
+LORA=../day00_lora-quickstart/private/adapter LORA_NAME=day00-demo bash code/serve.sh
 ```
 
 挂载后，base 和 adapter 在同一个服务中共存。`/v1/models` 列出两个名字，请求中的 `model` 字段决定使用哪一个。响应中的 `model` 字段回显实际使用的名字，可用来确认路由正确：
@@ -339,7 +339,7 @@ python3 code/latency.py --model Qwen/Qwen3.5-9B --runs 5
 
 脚本只用标准库，在宿主机上运行，不进入容器。核心部分如下：
 
-[days/day01_vllm-first-serve/code/latency.py · L18](https://github.com/enkerewpo/tokens-to-torque/blob/main/days/day01_vllm-first-serve/code/latency.py#L18-L40)
+[days/day01_vllm-first-serve/code/latency.py](https://github.com/enkerewpo/tokens-to-torque/blob/main/days/day01_vllm-first-serve/code/latency.py#L18-L40)
 ```python
 req = urllib.request.Request(f"{url}/v1/chat/completions", data=body,
                              headers={"Content-Type": "application/json"})
@@ -383,7 +383,8 @@ total = time.perf_counter() - t0
 
 ```bash
 bash code/ui.sh          # 在运行模型的机器上启动一个静态文件服务
-# 浏览器打开 http://<那台机器的地址>:8181
+# 在同一台机器上打开 http://localhost:8181
+# 从别的设备访问就把 localhost 换成那台机器的地址
 ```
 
 页面默认把服务地址设为同一台机器的 8000 端口，在板子上托管时无需配置。它从 `/v1/models` 读取 base 和 adapter 列表并生成切换按钮。每条回答下方实时显示 TTFT、TPOT 和 token/s，即 §2.3 的三个指标。

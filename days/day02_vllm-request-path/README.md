@@ -52,7 +52,7 @@ v1 引擎把工作分给两个进程。API 进程处理 HTTP、分词、按模�
 
 主循环的正体只有十几行，结构一目了然：
 
-[vllm/v1/engine/core.py · L428](https://github.com/vllm-project/vllm/blob/v0.22.1/vllm/v1/engine/core.py#L428-L457)
+[vllm/v1/engine/core.py](https://github.com/vllm-project/vllm/blob/v0.22.1/vllm/v1/engine/core.py#L428-L457)
 ```python
 def step(self) -> tuple[dict[int, EngineCoreOutputs], bool]:
     if not self.scheduler.has_requests():
@@ -77,7 +77,7 @@ def step(self) -> tuple[dict[int, EngineCoreOutputs], bool]:
 
 ### 2.4 调度器眼里没有 prefill 和 decode
 
-[vllm/v1/core/sched/scheduler.py · L331](https://github.com/vllm-project/vllm/blob/v0.22.1/vllm/v1/core/sched/scheduler.py#L329-L340) 开头的注释直接说明了它的模型：
+[vllm/v1/core/sched/scheduler.py](https://github.com/vllm-project/vllm/blob/v0.22.1/vllm/v1/core/sched/scheduler.py#L329-L340) 开头的注释直接说明了它的模型：
 
 > There's no "decoding phase" nor "prefill phase" in the scheduler. Each request just has the `num_computed_tokens` and `num_tokens_with_spec`.
 
@@ -115,12 +115,14 @@ def step(self) -> tuple[dict[int, EngineCoreOutputs], bool]:
 用 day 01 的脚本起一个服务即可。本节换成一个 0.8B 的小模型，理由是请求路径与模型大小无关，小模型启动快、显存占用低，一台机器上可以和别的服务并存。显存充裕时直接用 day 01 那个 9B 服务也一样，各段的绝对值会变大，比例关系不变。
 
 ```bash
-MODEL=<模型路径> PORT=8100 UTIL=0.04 MAXLEN=2048 MAXSEQS=8 LORA= NAME=t2t-vllm-day02 \
+MODEL=Qwen/Qwen3.5-0.8B PORT=8100 UTIL=0.04 MAXLEN=2048 MAXSEQS=8 LORA= NAME=t2t-vllm-day02 \
     bash ../day01_vllm-first-serve/code/serve.sh
 until curl -sf localhost:8100/health >/dev/null; do sleep 5; done && echo 就绪
 ```
 
-三个参数的作用：`LORA=` 表示不挂 adapter；`MAXSEQS=8` 把同时处理的请求数限制到 8，§3.3 要靠它才看得到排队；`NAME` 换一个，免得覆盖 day 01 的容器。
+`MODEL` 有两种写法。一种是 Hugging Face 上的仓库名，形如 `组织名/模型名`，上面用的 `Qwen/Qwen3.5-0.8B` 就是；权重不在本地时会自动下载到 `~/.cache/huggingface`。另一种是本地目录的绝对路径，适合已经下好或者机器不能联网的情况。用路径时注意它必须在挂进容器的目录下面，否则容器里看不到（§5 第 3 条）。
+
+其余参数：`LORA=` 表示不挂 adapter；`MAXSEQS=8` 把同时处理的请求数限制到 8，§3.3 要靠它才看得到排队；`NAME` 换一个，免得覆盖 day 01 的容器。
 
 ### 3.1 找到源码
 
@@ -146,13 +148,18 @@ sudo docker cp t2t-vllm-day02:/usr/local/lib/python3.12/dist-packages/vllm/v1 ./
 
 `code/trace_one.py` 发一条请求，在请求前后各抓一次 `/metrics`，相减得到这一条的值。vLLM 的指标按 **Prometheus** 的文本格式暴露：一行一个指标，值是进程启动以来的累计量，只增不减。其中一类叫**直方图**（histogram），它不存每次的原始值，只维护若干个区间的计数，外加一个总和 `_sum` 和一个总次数 `_count`。所以单条请求的值取不到，但两次快照的和之差除以次数之差，就是这期间那几条请求的平均值。只发一条请求时，这个平均值就是它本身。
 
+请求里的 `model` 字段必须和服务端认的名字完全一致，而那个名字就是启动时 `MODEL` 的值。不确定时问服务要：
+
 ```bash
-python3 code/trace_one.py --url http://localhost:8100 --model <模型名> --max-tokens 64
+curl -s localhost:8100/v1/models | python3 -c 'import json,sys; print(json.load(sys.stdin)["data"][0]["id"])'
+# Qwen/Qwen3.5-0.8B
+
+python3 code/trace_one.py --url http://localhost:8100 --model Qwen/Qwen3.5-0.8B --max-tokens 64
 ```
 
 核心是这几行：
 
-[days/day02_vllm-request-path/code/trace_one.py · L35](https://github.com/enkerewpo/tokens-to-torque/blob/main/days/day02_vllm-request-path/code/trace_one.py#L35-L50)
+[days/day02_vllm-request-path/code/trace_one.py](https://github.com/enkerewpo/tokens-to-torque/blob/main/days/day02_vllm-request-path/code/trace_one.py#L35-L50)
 ```python
 def scrape(url):
     with urllib.request.urlopen(f"{url}/metrics", timeout=10) as r:
@@ -170,7 +177,7 @@ def scrape(url):
 `code/watch_sched.py` 同时发 N 条请求，每 100 毫秒读一次两个瞬时值：`vllm:num_requests_running` 和 `vllm:num_requests_waiting`。这两个数直接来自调度器的两个队列长度。
 
 ```bash
-python3 code/watch_sched.py --url http://localhost:8100 --model <模型名> -n 8 --max-tokens 96
+python3 code/watch_sched.py --url http://localhost:8100 --model Qwen/Qwen3.5-0.8B -n 12 --max-tokens 96
 ```
 
 采样在主线程，请求在后台线程，输出是一条时间线。想看到排队，就把服务的并发上限调小：`MAXSEQS=4 bash ../day01_vllm-first-serve/code/serve.sh`。

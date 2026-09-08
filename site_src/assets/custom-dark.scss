@@ -60,22 +60,58 @@ code:not(.sourceCode) {
 /* 页末的源文件链接：小字、灰色、和正文拉开距离 */
 .source-link { margin-top: 2.4rem; font-size: .86rem; opacity: .75; }
 
-/* 源码卡片：一行文件名 + 跳到 GitHub 的链接，下面是代码块 */
+
+/* ---- 代码块 ---- */
+div.sourceCode, pre:not(.mermaid) {
+  border: 1px solid #3A404A;
+  border-radius: 8px;
+  background: #1B1F26;
+}
+div.sourceCode pre, pre > code { font-size: .84rem; line-height: 1.62; }
+
+/* ---- 源码卡片：GitHub 图标 + 路径 + 行号 + 跳转 ---- */
 .srccard {
   border: 1px solid #3A404A;
   border-radius: 8px;
   overflow: hidden;
-  margin: 1.2rem 0;
+  margin: 1.3rem 0;
 }
-.srccard > p:first-child {
-  margin: 0;
-  padding: .45rem .8rem;
-  background: #2E333B;
+.srccard-head {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .5rem .8rem;
+  background: #20242B;
   border-bottom: 1px solid #3A404A;
   font-family: $font-family-monospace;
-  font-size: .82rem;
+  font-size: .8rem;
 }
-.srccard > p:first-child a { color: #9BD62F; text-decoration: none; }
-.srccard > p:first-child a::after { content: " ↗"; opacity: .6; }
-.srccard > p:first-child a:hover { text-decoration: underline; }
-.srccard div.sourceCode, .srccard pre { margin: 0; border: 0; border-radius: 0; }
+.srccard-mark { flex: none; color: #8B93A0; }
+.srccard-path { text-decoration: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.srccard-dir { color: #8B93A0; }
+.srccard-file { color: #E8E8E8; font-weight: 600; }
+.srccard-path:hover .srccard-file { text-decoration: underline; }
+.srccard-lines {
+  flex: none;
+  padding: .05rem .4rem;
+  border-radius: 4px;
+  background: #2E333B;
+  color: #9AA1A9;
+  font-size: .72rem;
+}
+.srccard-open {
+  flex: none;
+  margin-left: auto;
+  color: #9BD62F;
+  text-decoration: none;
+  font-size: .76rem;
+}
+.srccard-open::after { content: " ↗"; }
+.srccard-open:hover { text-decoration: underline; }
+/* 卡片里的代码块自己不再画边框，边框由卡片提供 */
+.srccard div.sourceCode, .srccard pre {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: #1B1F26;
+}
