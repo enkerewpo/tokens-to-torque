@@ -528,7 +528,8 @@ python code/compare.py \
 ### 3.6 度量风格命中率与知识保持（10 min）
 
 ```bash
-python code/measure_style.py --model Qwen/Qwen3.5-9B --adapter private/adapter --prompts code/prompts.txt
+python code/measure_style.py --model Qwen/Qwen3.5-9B \
+    --adapter private/adapter --prompts code/prompts.txt
 ```
 
 它做两件事：
@@ -655,10 +656,15 @@ Jetson AGX Thor（120 W），Qwen3.5-9B bf16，LoRA r=16、α=32、`all-linear`�
 
 ```bash
 # 同样在容器里跑
-python code/collect_corpus.py --git ~/Code/your-repo --author-email "$(git config user.email)" \
-    --markdown ~/notes --out private/corpus.jsonl
-python code/build_sft.py --in private/corpus.jsonl --out private/sft.jsonl --min-chars 40
-python code/add_batch.py private/paste_*.txt      # 手动粘贴的聊天记录，自动合并连续消息
+python code/collect_corpus.py --out private/corpus.jsonl \
+    --git ~/Code/your-repo --markdown ~/notes \
+    --author-email "$(git config user.email)"
+
+python code/build_sft.py --in private/corpus.jsonl \
+    --out private/sft.jsonl --min-chars 40
+
+# 手动粘贴的聊天记录，自动合并连续消息
+python code/add_batch.py private/paste_*.txt
 ```
 
 个人语料一律放 `private/`（已 gitignore），不进仓库。

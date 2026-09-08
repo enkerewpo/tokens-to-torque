@@ -81,7 +81,8 @@ div.sourceCode pre, pre > code {
   line-height: 1.62;
   padding-right: 2.6rem;
 }
-/* 折行：长命令按版心宽度换行，长路径也要能断开 */
+/* 折行只是兜底，命令本身写短为主。
+   不要在这里做悬挂缩进：负的 text-indent 会把每行开头几个字符移出可视区。 */
 div.sourceCode pre code, pre > code { overflow-wrap: anywhere; }
 
 /* ---- 源码卡片：GitHub 图标 + 路径 + 行号 + 跳转 ---- */

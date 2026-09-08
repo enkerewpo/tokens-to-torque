@@ -139,9 +139,11 @@ def step(self) -> tuple[dict[int, EngineCoreOutputs], bool]:
 用 day 01 的脚本起一个服务即可。本节换成一个 0.8B 的小模型，理由是请求路径与模型大小无关，小模型启动快、显存占用低，一台机器上可以和别的服务并存。显存充裕时直接用 day 01 那个 9B 服务也一样，各段的绝对值会变大，比例关系不变。
 
 ```bash
-MODEL=Qwen/Qwen3.5-0.8B PORT=8100 UTIL=0.04 MAXLEN=2048 MAXSEQS=8 LORA= NAME=t2t-vllm-day02 \
-    bash ../day01_vllm-first-serve/code/serve.sh
-until curl -sf localhost:8100/health >/dev/null; do sleep 5; done && echo 就绪
+export MODEL=Qwen/Qwen3.5-0.8B MAXLEN=2048 UTIL=0.04
+export PORT=8100 MAXSEQS=8 LORA= NAME=t2t-vllm-day02
+bash ../day01_vllm-first-serve/code/serve.sh
+
+until curl -sf localhost:8100/health >/dev/null; do sleep 5; done
 ```
 
 `MODEL` 有两种写法。一种是 Hugging Face 上的仓库名，形如 `组织名/模型名`，上面用的 `Qwen/Qwen3.5-0.8B` 就是；权重不在本地时会自动下载到 `~/.cache/huggingface`。另一种是本地目录的绝对路径，适合已经下好或者机器不能联网的情况。用路径时注意它必须在挂进容器的目录下面，否则容器里看不到（§5 第 3 条）。
@@ -153,17 +155,19 @@ until curl -sf localhost:8100/health >/dev/null; do sleep 5; done && echo 就绪
 源码在容器里，不用另外 clone：
 
 ```bash
-sudo docker exec t2t-vllm-day02 python3 -c "import vllm, pathlib; print(pathlib.Path(vllm.__file__).parent)"
+C=t2t-vllm-day02                      # 容器名，下面几条都用它
+
+sudo docker exec $C python3 -c "import vllm; print(vllm.__path__[0])"
 # /usr/local/lib/python3.12/dist-packages/vllm
 
-sudo docker exec t2t-vllm-day02 sed -n '428,460p' \
-    /usr/local/lib/python3.12/dist-packages/vllm/v1/engine/core.py
+V=/usr/local/lib/python3.12/dist-packages/vllm
+sudo docker exec $C sed -n '428,460p' $V/v1/engine/core.py
 ```
 
 要在本机编辑器里读，就把这几个文件复制出来：
 
 ```bash
-sudo docker cp t2t-vllm-day02:/usr/local/lib/python3.12/dist-packages/vllm/v1 ./vllm-v1
+sudo docker cp $C:$V/v1 ./vllm-v1
 ```
 
 §2 引用的行号对应 vLLM 0.22.1，换版本会变，用函数名搜索更稳。
@@ -175,10 +179,11 @@ sudo docker cp t2t-vllm-day02:/usr/local/lib/python3.12/dist-packages/vllm/v1 ./
 请求里的 `model` 字段必须和服务端认的名字完全一致，而那个名字就是启动时 `MODEL` 的值。不确定时问服务要：
 
 ```bash
-curl -s localhost:8100/v1/models | python3 -c 'import json,sys; print(json.load(sys.stdin)["data"][0]["id"])'
-# Qwen/Qwen3.5-0.8B
+curl -s localhost:8100/v1/models | grep -o '"id":"[^"]*"' | head -1
+# "id":"Qwen/Qwen3.5-0.8B"
 
-python3 code/trace_one.py --url http://localhost:8100 --model Qwen/Qwen3.5-0.8B --max-tokens 64
+U=http://localhost:8100
+python3 code/trace_one.py --url $U --model $MODEL --max-tokens 64
 ```
 
 核心是这几行：
@@ -201,7 +206,7 @@ def scrape(url):
 `code/watch_sched.py` 同时发 N 条请求，每 100 毫秒读一次两个瞬时值：`vllm:num_requests_running` 和 `vllm:num_requests_waiting`。这两个数直接来自调度器的两个队列长度。
 
 ```bash
-python3 code/watch_sched.py --url http://localhost:8100 --model Qwen/Qwen3.5-0.8B -n 12 --max-tokens 96
+python3 code/watch_sched.py --url $U --model $MODEL -n 12 --max-tokens 96
 ```
 
 采样在主线程，请求在后台线程，输出是一条时间线。想看到排队，就把服务的并发上限调小：`MAXSEQS=4 bash ../day01_vllm-first-serve/code/serve.sh`。
@@ -209,7 +214,7 @@ python3 code/watch_sched.py --url http://localhost:8100 --model Qwen/Qwen3.5-0.8
 ### 3.4 停
 
 ```bash
-bash ../day01_vllm-first-serve/code/stop.sh    # 或 NAME=t2t-vllm-day02 时用 docker stop
+sudo docker stop $C && sudo docker rm $C
 ```
 
 ## 4. 结果
