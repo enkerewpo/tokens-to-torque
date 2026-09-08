@@ -155,6 +155,9 @@ def main():
         # 首页的居中横幅在 Quarto 里由 frontmatter 接管，去掉原来的 <div>
         if dst == "index.md":
             body = re.sub(r'<div align="center">\n(.*?)\n</div>', r"\1", body, flags=re.S)
+            # 徽章和「在线阅读」那行是给 GitHub 首页的，站点上是自指，删掉
+            body = "\n".join(l for l in body.split("\n")
+                             if "img.shields.io" not in l and not l.startswith("**在线阅读："))
         write(SRC / dst, frontmatter(title) + body, written)
 
     days = []
@@ -186,7 +189,13 @@ def main():
     entries = "\n".join(f"          - text: \"{t}\"\n            href: days/day{n}.md"
                         for n, t in days) or "          - text: (还没开始)\n            href: index.md"
     app_entries = "\n".join(f"          - text: \"{t}\"\n            href: appendix/{n}.md" for n, t in apps)
-    (SRC / "_quarto.yml").write_text(tpl.replace("__DAYS__", entries).replace("__APPENDIX__", app_entries))
+    # 导航栏的两个下拉菜单，缩进比侧栏浅两格
+    short = lambda s: s.split("：")[0]          # 菜单里只留冒号前那截，标题太长会撑破下拉框
+    days_menu = "\n".join(f"          - text: \"{short(t)}\"\n            href: days/day{n}.md"
+                          for n, t in days) or "          - text: (还没开始)\n            href: index.md"
+    app_menu = "\n".join(f"          - text: \"{short(t)}\"\n            href: appendix/{n}.md" for n, t in apps)
+    (SRC / "_quarto.yml").write_text(tpl.replace("__DAYS__", entries).replace("__APPENDIX__", app_entries)
+                                        .replace("__DAYS_MENU__", days_menu).replace("__APPENDIX_MENU__", app_menu))
 
     for stale in list(SRC.glob("*.md")) + list((SRC / "days").glob("*.md")) + list((SRC / "appendix").glob("*.md")):
         if stale not in written:

@@ -24,14 +24,18 @@ website:
     logo-alt: "tokens to torque"
     title: false
     left:
+      - text: 教程
+        menu:
+__DAYS_MENU__
+      - text: 附录
+        menu:
+__APPENDIX_MENU__
       - text: 课表
         href: roadmap.md
       - text: 环境
         href: setup.md
       - text: 资源
         href: resources.md
-      - text: Agent
-        href: agents.md
     right:
       - icon: github
         href: https://github.com/enkerewpo/tokens-to-torque
@@ -42,7 +46,7 @@ website:
     contents:
       - text: 首页
         href: index.md
-      - section: Days
+      - section: 教程
         contents:
 __DAYS__
       - section: 附录
