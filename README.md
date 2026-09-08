@@ -6,7 +6,7 @@
 
 `serving` · `CUDA` · `training` · `VLM` · `VLA` · `WAM`
 
-[![Stars](https://img.shields.io/github/stars/enkerewpo/tokens-to-torque?style=flat&color=76B900)](https://github.com/enkerewpo/tokens-to-torque/stargazers) [![Discussions](https://img.shields.io/github/discussions/enkerewpo/tokens-to-torque?style=flat&color=76B900)](https://github.com/enkerewpo/tokens-to-torque/discussions) [![Site](https://img.shields.io/badge/site-enkerewpo.github.io-informational.svg)](https://enkerewpo.github.io/tokens-to-torque/) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) ![Progress](https://img.shields.io/badge/progress-2%2F73_days-76B900.svg) ![Hardware](https://img.shields.io/badge/hardware-Jetson%20%2F%20any%20CUDA%20GPU-76B900.svg)
+[![Stars](https://img.shields.io/github/stars/enkerewpo/tokens-to-torque?style=flat&color=76B900)](https://github.com/enkerewpo/tokens-to-torque/stargazers) [![Discussions](https://img.shields.io/github/discussions/enkerewpo/tokens-to-torque?style=flat&color=76B900)](https://github.com/enkerewpo/tokens-to-torque/discussions) [![Site](https://img.shields.io/badge/site-enkerewpo.github.io-informational.svg)](https://enkerewpo.github.io/tokens-to-torque/) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) ![Progress](https://img.shields.io/badge/progress-3%2F73_days-76B900.svg) ![Hardware](https://img.shields.io/badge/hardware-Jetson%20%2F%20any%20CUDA%20GPU-76B900.svg)
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="site_src/assets/hero-dark.svg">
@@ -34,6 +34,7 @@
 |---|---|---|
 | [00](days/day00_lora-quickstart/) | LoRA 给一个 9B 模型加了多少参数 | 43 M 个参数，adapter 166 MB，占全模型 0.48% |
 | [01](days/day01_vllm-first-serve/) | vLLM 比 `transformers.generate` 快多少 | 首 token 快 3.3×，吞吐快 1.6×，单请求 |
+| [02](days/day02_vllm-request-path/) | 一条请求在引擎里的时间花在哪 | 排队 0 ms，prefill 23 ms，decode 677 ms |
 
 ## 适合谁
 
@@ -62,13 +63,13 @@
 | Phase | 主题 | Days | 进度 |
 |---|---|---|---|
 | 0 | Quickstart：微调入门 | 00 | 1 / 1 |
-| 1 | Serving：把模型跑起来并测准 | 01 到 12 | 1 / 12 |
+| 1 | Serving：把模型跑起来并测准 | 01 到 12 | 2 / 12 |
 | 2 | CUDA：从 kernel 到 profile | 13 到 24 | 0 / 12 |
 | 3 | Training：从零训到微调 | 25 到 36 | 0 / 12 |
 | 4 | VLM：接上视觉 | 37 到 48 | 0 / 12 |
 | 5 | VLA：生成动作 | 49 到 60 | 0 / 12 |
 | 6 | WAM：世界动作模型 | 61 到 72 | 0 / 12 |
-| | | 合计 | 2 / 73 |
+| | | 合计 | 3 / 73 |
 
 完整的每日目标、动手内容和产出在 [ROADMAP.md](ROADMAP.md)。
 
@@ -87,7 +88,7 @@
 | Day | 主题 | 产出 |
 |---|---|---|
 | [01](days/day01_vllm-first-serve/) | 把模型变成一个服务 | `serve.sh` + 第一组延迟数字 + 浏览器客户端 |
-| 02 | 一个请求在 vLLM 里经历了什么 | 请求路径图 |
+| [02](days/day02_vllm-request-path/) | 一个请求在 vLLM 里经历了什么 | 请求路径图 + 分段耗时 |
 | 03 | KV cache 占多少显存 | 手算 vs 实测，误差 < 15% |
 | 04 | 连续批处理为什么快 | throughput–latency 帕累托曲线 |
 | 05 | 可复现的 benchmark | `bench.sh`，三遍方差 < 5% |

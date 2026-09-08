@@ -833,6 +833,72 @@ def fig_paged(p):
                "块之间不必连续，相同前缀还能共享")
 
 
+# ------------------------------------------------ 一个请求在 vLLM 里走过的路
+def fig_request_path(p):
+    """左边是 API 进程，右边是 EngineCore 进程，中间那条虚线是进程边界。"""
+    W, H = 780, 500
+    b = [_defs(p)]
+    LX, RX, BW, BH = 24, 372, 292, 52
+
+    b.append(text(30, 30, "一个请求走过的对象", fs(W, 1.06), p["fg"], weight="700"))
+    b.append(text(30, 52, "左列在 API 进程里，右列在 EngineCore 进程里，两列之间走 ZMQ",
+                  fs(W, .8), p["sub"]))
+
+    # 进程边界
+    b.append(f'<path d="M{RX - 36} 70V{H - 26}" stroke="{p["line"]}" '
+             f'stroke-width="1.2" stroke-dasharray="6 5"/>')
+    b.append(text(LX, 88, "API 进程", fs(W, .8), p["sub"], cls="s"))
+    b.append(text(RX, 88, "EngineCore 进程", fs(W, .8), p["sub"], cls="s"))
+
+    left = ["POST /v1/chat/completions", "AsyncLLM.add_request()",
+            "InputProcessor：文本 → token", "EngineCoreClient：ZMQ 发出去",
+            "OutputProcessor：token → 文本", "SSE 逐块返回"]
+    right = ["EngineCoreProc.run_busy_loop()", "Scheduler.schedule()",
+             "Executor.execute_model()", "Scheduler.update_from_output()"]
+
+    lr, rr = [], []
+    y = 102
+    for i, name in enumerate(left):
+        r = Rect(LX, y, BW, BH)
+        lr.append(r)
+        accent = GREEN if i in (1, 3) else None
+        b.append(_card(p, r, name, stroke=accent))
+        y += BH + 12
+    y = 102 + BH + 12
+    for i, name in enumerate(right):
+        r = Rect(RX, y, BW, BH)
+        rr.append(r)
+        b.append(_card(p, r, name, stroke=GREEN if i == 1 else None))
+        y += BH + 12
+
+    for a, c in zip(lr, lr[1:]):
+        b.append(f'<path d="M{a.cx} {a.bottom}V{c.top - 2}" stroke="{p["sub"]}" '
+                 f'stroke-width="1.5" marker-end="url(#qa)"/>')
+    for a, c in zip(rr, rr[1:]):
+        b.append(f'<path d="M{a.cx} {a.bottom}V{c.top - 2}" stroke="{p["sub"]}" '
+                 f'stroke-width="1.5" marker-end="url(#qa)"/>')
+
+    # 跨进程：请求过去，输出回来
+    b.append(f'<path d="M{lr[3].x + BW} {lr[3].cy}H{rr[0].x - 6}" stroke="{GREEN}" '
+             f'stroke-width="1.8" marker-end="url(#qa)"/>')
+    b.append(text((lr[3].x + BW + rr[0].x) / 2, lr[3].cy - 8, "请求",
+                  fs(W, .8), GREEN, anchor="middle", cls="s"))
+    b.append(f'<path d="M{rr[3].x - 6} {rr[3].cy}H{lr[4].x + BW}" stroke="{BLUE}" '
+             f'stroke-width="1.8" marker-end="url(#qa)"/>')
+    b.append(text((lr[4].x + BW + rr[3].x) / 2, rr[3].cy - 8, "输出",
+                  fs(W, .8), BLUE, anchor="middle", cls="s"))
+
+    # 引擎主循环是个环：更新完回到调度
+    loop_x = rr[3].x + BW + 22
+    b.append(f'<path d="M{rr[3].x + BW} {rr[3].cy}H{loop_x}V{rr[1].cy}H{rr[1].x + BW + 6}" '
+             f'stroke="{AMBER}" stroke-width="1.6" fill="none" marker-end="url(#qa)"/>')
+    b.append(text(loop_x + 8, (rr[1].cy + rr[3].cy) / 2 + 4, "每步一轮",
+                  fs(W, .8), AMBER, cls="s"))
+    return svg(W, H, "".join(b), label=(
+        "一个请求在 vLLM 里的路径：API 进程做分词和发送，EngineCore 进程里"
+        "调度、执行、回写输出，两个进程之间用 ZMQ 传消息"))
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     for name, fn in {"fig-lora-arch": fig_lora_arch, "fig-train-step": fig_train_step,
@@ -844,7 +910,8 @@ def main():
                      "fig-multihead": fig_multihead,
                      "fig-multihead-shapes": fig_multihead_shapes,
                      "fig-batching": fig_batching,
-                     "fig-paged": fig_paged}.items():
+                     "fig-paged": fig_paged,
+                     "fig-request-path": fig_request_path}.items():
         for suffix, pal in (("light", LIGHT), ("dark", DARK)):
             (OUT / f"{name}-{suffix}.svg").write_text(fn(pal))
         print(f"  {name}  {(OUT / f'{name}-light.svg').stat().st_size} 字节")

@@ -13,13 +13,16 @@ MODEL="${MODEL:-Qwen/Qwen3.5-9B}"
 PORT="${PORT:-8000}"
 MAXLEN="${MAXLEN:-8192}"          # 单个请求最长 token 数（提示 + 生成）
 UTIL="${UTIL:-0.30}"              # vLLM 允许占用的显存比例
+MAXSEQS="${MAXSEQS:-}"            # 同时最多处理几条请求，留空用 vLLM 的默认值
 IMAGE="${IMAGE:-nvcr.io/nvidia/vllm:26.06-py3}"
 NAME="${NAME:-t2t-vllm}"
 LOG="${LOG:-$HOME/t2t-vllm.log}"
 # 挂 day 00 训出来的 adapter：留空就只服务 base 模型。
 # 挂上之后 base 和 adapter 在同一个服务里共存，请求里换 model 名字就切换。
 REPO="${REPO:-$HOME/code/tokens-to-torque}"
-LORA="${LORA:-$REPO/days/day00_lora-quickstart/private/adapter-demo}"
+# 这里是 ${LORA-...} 不是 ${LORA:-...}：只有完全没设时才用默认值，
+# 显式写 LORA= 就是「不挂 adapter」。写成 :- 的话空值也会落回默认。
+LORA="${LORA-$REPO/days/day00_lora-quickstart/private/adapter-demo}"
 LORA_NAME="${LORA_NAME:-day00-demo}"
 
 sudo docker rm -f "$NAME" >/dev/null 2>&1 || true
@@ -37,6 +40,7 @@ sudo docker run -d --name "$NAME" \
         --port "$PORT" \
         --max-model-len "$MAXLEN" \
         --gpu-memory-utilization "$UTIL" \
+        ${MAXSEQS:+--max-num-seqs "$MAXSEQS"} \
         ${LORA:+--enable-lora --max-lora-rank 16 --lora-modules "$LORA_NAME=$LORA"} \
     >/dev/null
 
