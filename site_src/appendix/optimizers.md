@@ -136,3 +136,8 @@ $m$、$v$ 必须是 fp32：它们每步只变一点点（$v$ 每步加 $0.001\,g
 [^rmsprop]: Tieleman, T. & Hinton, G. ["Lecture 6.5 — RMSProp."](https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf) Coursera *Neural Networks for Machine Learning*, 2012.
 [^adam]: Kingma, D. P. & Ba, J. "Adam: A Method for Stochastic Optimization." [*ICLR* 2015](https://openreview.net/forum?id=8gmWwjFyLj). [arXiv:1412.6980](https://arxiv.org/abs/1412.6980). 算法见 Algorithm 1，偏差修正的推导见 §3。
 [^adamw]: Loshchilov, I. & Hutter, F. "Decoupled Weight Decay Regularization." [*ICLR* 2019](https://openreview.net/forum?id=Bkg6RiCqY7). [arXiv:1711.05101](https://arxiv.org/abs/1711.05101).
+
+
+::: {.source-link}
+[在 GitHub 上查看本页源文件](https://github.com/enkerewpo/tokens-to-torque/blob/main/appendix/optimizers.md)
+:::

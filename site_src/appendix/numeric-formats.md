@@ -86,3 +86,8 @@ fp32 和 fp16 是 IEEE 754 标准[^ieee]；bf16 是 Google 为 TPU 设计的[^bf
 [^bf16]: Wang, S. & Kanwar, P. ["BFloat16: The secret to high performance on Cloud TPUs."](https://cloud.google.com/blog/products/ai-machine-learning/bfloat16-the-secret-to-high-performance-on-cloud-tpus) Google Cloud Blog, 2019.
 [^fp8]: Micikevicius, P. et al. "FP8 Formats for Deep Learning." 2022. [arXiv:2209.05433](https://arxiv.org/abs/2209.05433).
 [^mixed]: Micikevicius, P. et al. "Mixed Precision Training." [*ICLR* 2018](https://openreview.net/forum?id=r1gs9JgRZ). [arXiv:1710.03740](https://arxiv.org/abs/1710.03740). fp32 主副本与 loss scaling 都出自这篇。
+
+
+::: {.source-link}
+[在 GitHub 上查看本页源文件](https://github.com/enkerewpo/tokens-to-torque/blob/main/appendix/numeric-formats.md)
+:::

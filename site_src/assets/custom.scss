@@ -72,3 +72,9 @@ code:not(.sourceCode) {
   border-radius: 4px;
   font-size: 0.88em;
 }
+
+/* 行内代码里可能出现很长的报错或路径，不允许它把版心撑破 */
+:not(pre) > code { overflow-wrap: anywhere; }
+
+/* 页末的源文件链接：小字、灰色、和正文拉开距离 */
+.source-link { margin-top: 2.4rem; font-size: .86rem; opacity: .75; }

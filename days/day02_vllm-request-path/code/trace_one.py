@@ -99,7 +99,12 @@ def main() -> None:
             d_cnt = after[c] - before.get(c, 0.0)
             if d_cnt:
                 v = d_sum / d_cnt
-                shown = f"{v * 1000:>9.1f} ms" if unit == "s" else f"{v:>12.2f}"
+                if unit != "s":
+                    shown = f"{v:>12.2f}"
+                elif v >= 0.001:                 # 1 ms 以上按毫秒
+                    shown = f"{v * 1000:>9.1f} ms"
+                else:                            # 更小的按微秒，否则会被截成 0.0 ms
+                    shown = f"{v * 1e6:>9.1f} µs"
                 print(f"{base:<38} {shown}   {meaning}")
         elif base in after:               # 计数器：直接相减
             d = after[base] - before.get(base, 0.0)

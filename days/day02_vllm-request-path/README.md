@@ -107,15 +107,15 @@ def step(self) -> tuple[dict[int, EngineCoreOutputs], bool]:
 
 ### 3.0 前置
 
-day 01 的服务能起来即可。本节的实验用的是同一套脚本，只是换了小模型：机器上还跑着别的服务时，起 9B 会把系统内存挤爆（见 §5）。
+用 day 01 的脚本起一个服务即可。本节换成一个 0.8B 的小模型，理由是请求路径与模型大小无关，小模型启动快、显存占用低，一台机器上可以和别的服务并存。显存充裕时直接用 day 01 那个 9B 服务也一样，各段的绝对值会变大，比例关系不变。
 
 ```bash
-MODEL=<模型路径> PORT=8100 UTIL=0.12 MAXLEN=4096 LORA= NAME=t2t-vllm-day02 \
+MODEL=<模型路径> PORT=8100 UTIL=0.04 MAXLEN=2048 MAXSEQS=8 LORA= NAME=t2t-vllm-day02 \
     bash ../day01_vllm-first-serve/code/serve.sh
 until curl -sf localhost:8100/health >/dev/null; do sleep 5; done && echo 就绪
 ```
 
-`LORA=` 表示不挂 adapter。`NAME` 换一个，免得覆盖 day 01 的容器。
+三个参数的作用：`LORA=` 表示不挂 adapter；`MAXSEQS=8` 把同时处理的请求数限制到 8，§3.3 要靠它才看得到排队；`NAME` 换一个，免得覆盖 day 01 的容器。
 
 ### 3.1 找到源码
 
@@ -177,68 +177,80 @@ bash ../day01_vllm-first-serve/code/stop.sh    # 或 NAME=t2t-vllm-day02 时用 
 
 ## 4. 结果
 
-Jetson AGX Thor（120 W），vLLM 0.22.1（NGC `26.06-py3` 容器），Qwen3.5-0.8B bf16，`--max-model-len 4096 --gpu-memory-utilization 0.12`。用小模型是因为机器上同时跑着别的服务，只剩约 20 GB 可用（见 §5）。请求路径与模型大小无关，换 9B 数值会变，各段的比例关系不变。
+Jetson AGX Thor（120 W），vLLM 0.22.1（NGC `26.06-py3` 容器），Qwen3.5-0.8B bf16，`--max-model-len 2048 --gpu-memory-utilization 0.04 --max-num-seqs 8`。
 
-启动日志里的三个数：
+启动日志里的四个数：
 
 | | 值 |
 |---|---|
-| 权重加载 | 1.72 GiB，0.81 s |
-| KV cache | 12.02 GiB，718 661 token |
-| 4096 token 每条时的最大并发 | 175× |
-| torch.compile | 44.0 s |
+| 权重加载 | 1.72 GiB，1.10 s |
+| torch.compile | 43.8 s |
+| KV cache | 2.2 GiB，102 985 token |
+| 每条请求占满 2048 token 时的最大并发 | 50× |
 
 一条请求（提示 20 个 token，生成 64 个）的分段，来自 `code/trace_one.py`：
 
 | 指标 | 值 | 对应路径上的哪一步 |
 |---|---|---|
-| `request_queue_time_seconds` | 0.0 ms | 进 `waiting` 到第一次被 `schedule()` 选中 |
-| `request_prefill_time_seconds` | 23.4 ms | 提示一次算完 |
-| `time_to_first_token_seconds` | 28.2 ms | 客户端看到第一个 token |
-| `request_decode_time_seconds` | 676.9 ms | 第一个 token 到最后一个 |
-| `request_inference_time_seconds` | 700.3 ms | prefill + decode |
-| `inter_token_latency_seconds` | 10.7 ms | 相邻两个 token 的间隔 |
-| 客户端量到的端到端 | 705.9 ms | 含 HTTP 和 SSE 的开销 |
+| `request_queue_time_seconds` | 9.0 µs | 进 `waiting` 到第一次被 `schedule()` 选中 |
+| `request_prefill_time_seconds` | 28.2 ms | 提示一次算完 |
+| `time_to_first_token_seconds` | 32.6 ms | 客户端看到第一个 token |
+| `request_decode_time_seconds` | 685.3 ms | 第一个 token 到最后一个 |
+| `request_inference_time_seconds` | 713.5 ms | prefill + decode |
+| `inter_token_latency_seconds` | 10.9 ms | 相邻两个 token 的间隔 |
+| 客户端量到的端到端 | 719.2 ms | 含 HTTP 和 SSE 的开销 |
 | `num_preemptions_total` | 0 | 没有发生抢占 |
 
-空闲的服务上排队时间是 0，这条请求一进来就被下一步调度选中。decode 占了总时间的 96%，与 day 01 §2.3 的结论一致：生成越长，TPOT 越主导。
+服务空闲时排队时间是 9 微秒，也就是从 `add_request` 到被下一轮 `schedule()` 选中的间隔。这个量级说明请求几乎是立刻进入批次的，主循环没有额外的等待窗口。decode 占了总时间的 96%，与 day 01 §2.3 的结论一致：生成越长，TPOT 越主导。
 
 `vllm:iteration_tokens_total` 的平均值是 **1.31 个 token**。这个数把 §2.4 说的调度模型验证了：一次 prefill 步处理 20 个 token，之后 64 步各处理 1 个，$(20 + 64) / 65 = 1.29$，与实测相符。引擎绝大多数步只算一个 token，这正是 decode 阶段受内存带宽限制的原因。
 
-并发 8 条、每条 96 个 token 时的时间线（`code/watch_sched.py`）：
+### 12 条请求撞上 8 个位置
+
+`--max-num-seqs 8` 时同时发 12 条，每条最多 96 个 token（`code/watch_sched.py`，每 100 毫秒采样一次）：
 
 ```text
   时刻 (s)   在跑   在等
-    0.44    8    0  ████████
-    1.09    8    0  ████████
-    1.62    8    0  ████████
+    3.03    8    4  ████████····
+    4.19    8    4  ████████····
+    4.29    1    3  █···
+    4.40    4    0  ████
+    5.35    4    0  ████
 ```
 
-8 条全部进入同一批，等待队列始终是空的。KV cache 能装 718 661 个 token，而 8 条请求最多用 8 × 4096 ≈ 33 000 个，`allocate_slots` 从不失败，`max_num_seqs` 的默认值也远大于 8。
+前 8 条一起进入批次，后 4 条留在 `waiting` 队列里。4.29 秒时前 8 条同时结束，调度器在下一轮就把等待的 4 条全部放进来。各条的端到端时间因此分成两档：
 
-代价体现在延迟上：
+| | 端到端 |
+|---|---|
+| 先进入的 8 条 | 4.23 到 4.26 s |
+| 排队的 4 条 | 5.42 到 5.44 s |
 
-| | 端到端 | 每条的输出 token |
-|---|---|---|
-| 单条请求 | 0.71 s | 64 |
-| 并发 8 条 | 1.69 s（8 条相差不到 10 ms） | 96 |
+第二批比第一批多花的 1.18 秒，就是它们在队列里等的时间。同一批内部的 8 条相差不到 30 毫秒，因为它们每一步都被放进同一个批次，同步前进。
 
-按每 token 折算，单条是 11.0 ms，并发 8 条是 17.6 ms。每条请求慢了 60%，而单位时间的总产出涨到 4.5 倍。这就是连续批处理的取舍，day 04 会把这条曲线完整扫出来。
-
-8 条请求的端到端时间相差不到 10 毫秒，因为它们每一步都被放进同一个批次，同步前进。
+这里也能看出 `max_num_seqs` 和 KV cache 是两个独立的限制。缓存能装 102 985 个 token，12 条请求最多用 12 × 2048 ≈ 24 600 个，远没到上限，排队完全是并发数上限造成的。day 04 会把这两个限制分开扫。
 
 ## 5. 踩坑
 
-1. **`--gpu-memory-utilization` 在共享的机器上要按当前空闲量算，不是按总量。** Thor 是统一内存，这个比例乘的是 122 GB 总量。机器上还跑着别的服务时，0.06 换算成 7.3 GB，扣掉权重和 CUDA graph 之后 vLLM 报 `Available KV cache memory: -1.14 GiB` 并退出。改成 0.12 才有 12 GiB 的 KV cache。反过来，空闲内存降到 6.7 GB 之后，同样的 0.12 又变成启动即失败：`Free memory on device cuda:0 (6.71/122.83 GiB) on startup is less than desired GPU memory utilization`。起之前先 `free -g` 看一眼。
+1. **`--gpu-memory-utilization` 是按设备总量算的，不是按当前空闲量。** 这个比例乘的是设备内存总量，而 vLLM 启动时会拿当前空闲量和它相比，不够就直接退出。所以同一个值在空机器上能用，在跑着别的任务的机器上会失败。另一种失败更隐蔽：比例够得着，但扣掉权重、激活值和 CUDA graph 之后 KV cache 剩下负数。两条报错分别长这样：
+
+   ```text
+   Available KV cache memory: -1.14 GiB
+   Free memory on device cuda:0 (6.63/122.83 GiB) on startup is less than
+   desired GPU memory utilization (0.06, 7.37 GiB).
+   ```
+
+   第二种的应对是把 `--max-num-seqs` 和 `--max-model-len` 调小：显存探测按这两个值构造最大批次，调小之后同样的比例能留出更多 KV cache。
+
 2. **`serve.sh` 里 `LORA=` 原来不生效。** 脚本写的是 `${LORA:-默认路径}`，这个写法在变量为空时也会落回默认值，于是显式写 `LORA=` 仍然会去挂 day 00 的 adapter，而那个路径在别的机器上不存在，服务直接起不来。改成 `${LORA-默认路径}`（少一个冒号）之后，只有完全不设这个变量才用默认值。
 3. **模型目录必须在挂进容器的路径下。** 把权重放在 `~/models/` 下、用绝对路径传给 `vllm serve`，容器里看不到这个目录，vLLM 会把它当成 Hugging Face 仓库名，报 `Repo id must be in the form 'repo_name' or 'namespace/repo_name'`。放进已经挂载的缓存目录即可。
 4. **名字里有 `_total` 的不一定是计数器。** `vllm:iteration_tokens_total` 是直方图，单位是 token 数。按时间打印会得到「1310 毫秒」这种数字，看起来还挺合理，所以特别容易错。判断方法是看 `/metrics` 里有没有对应的 `_bucket` 行。
-5. **容器内没有到 Hugging Face 的路由。** 宿主机能连通，桥接网络里的容器连不上，容器里预设的代理又指向 `127.0.0.1`，在容器里就是它自己。结论是模型要么提前下好，要么在宿主机上下载再挂进去。
+5. **容器的网络和宿主机不是一回事。** 宿主机能访问 Hugging Face，不代表容器里也能：桥接网络的出口不同，而写在容器环境变量里的代理地址如果是 `127.0.0.1`，在容器里指的是容器自己，连接会被直接拒绝。可靠的做法是权重先下载到宿主机，再通过挂载给容器用，并加上 `HF_HUB_OFFLINE=1` 让它在缺文件时立刻报错而不是反复重试。
 6. **指标要等请求结束后才写入。** 请求返回和指标更新之间有一小段延迟，紧接着抓 `/metrics` 会拿到旧值，导致差值为零。脚本里等了 0.5 秒。
+7. **打印精度会造出假的零。** 排队时间的真实值是 9 微秒，脚本最初一律按毫秒保留一位小数，于是显示成 `0.0 ms`，看起来像这一段根本没发生。凡是跨几个数量级的时间量，要么按值切换单位，要么直接打印原始秒数。
 
 ## 6. 延伸
 
 - vLLM 的 [V1 架构设计文档](https://docs.vllm.ai/en/latest/design/arch_overview.html)，看完源码再读一遍，能确认自己没有理解偏。
 - 想看调度器的完整决策过程，把日志级别调到 DEBUG：`-e VLLM_LOGGING_LEVEL=DEBUG`。输出很多，建议只在单条请求时开。
 
-day 03 要回答的问题：KV cache 那 12.02 GiB 是怎么算出来的？改 `--max-model-len` 和 `--gpu-memory-utilization`，预测的容量和实测差多少？
+day 03 要回答的问题：启动日志报的 102 985 个 token 是怎么算出来的？改 `--max-model-len` 和 `--gpu-memory-utilization` 各取三组，手算的容量和实测差多少？

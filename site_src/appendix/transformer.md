@@ -473,3 +473,8 @@ $$
 [^moe]: Fedus et al., *Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity*, JMLR 2022，§2 路由。[arXiv:2101.03961](https://arxiv.org/abs/2101.03961)
 [^lora]: Hu et al., *LoRA: Low-Rank Adaptation of Large Language Models*, ICLR 2022，§4 方法。[arXiv:2106.09685](https://arxiv.org/abs/2106.09685)
 [^spec]: Leviathan et al., *Fast Inference from Transformers via Speculative Decoding*, ICML 2023，§2 算法与接受率。[arXiv:2211.17192](https://arxiv.org/abs/2211.17192)
+
+
+::: {.source-link}
+[在 GitHub 上查看本页源文件](https://github.com/enkerewpo/tokens-to-torque/blob/main/appendix/transformer.md)
+:::

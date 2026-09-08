@@ -1,12 +1,12 @@
-客户端量到的端到端：705.9 ms，收到 64 个块
+客户端量到的端到端：719.2 ms，收到 64 个块
 
 指标                                            这一条的值   含义
-vllm:request_queue_time_seconds              0.0 ms   排队：进 waiting 队列到第一次被调度
-vllm:request_prefill_time_seconds           23.4 ms   prefill：第一次被调度到提示算完
-vllm:request_decode_time_seconds           676.9 ms   decode：出第一个 token 到最后一个
-vllm:request_inference_time_seconds        700.3 ms   prefill + decode
-vllm:time_to_first_token_seconds            28.2 ms   TTFT
-vllm:inter_token_latency_seconds            10.7 ms   相邻两个 token 的间隔
+vllm:request_queue_time_seconds              9.0 µs   排队：进 waiting 队列到第一次被调度
+vllm:request_prefill_time_seconds           28.2 ms   prefill：第一次被调度到提示算完
+vllm:request_decode_time_seconds           685.3 ms   decode：出第一个 token 到最后一个
+vllm:request_inference_time_seconds        713.5 ms   prefill + decode
+vllm:time_to_first_token_seconds            32.6 ms   TTFT
+vllm:inter_token_latency_seconds            10.9 ms   相邻两个 token 的间隔
 vllm:iteration_tokens_total                    1.31   引擎每一步处理的 token 数（平均）
 vllm:request_prompt_tokens                    20.00   提示 token 数
 vllm:request_generation_tokens                64.00   生成 token 数

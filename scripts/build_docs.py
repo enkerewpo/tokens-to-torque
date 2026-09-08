@@ -128,6 +128,16 @@ def frontmatter(title: str) -> str:
     return f'---\ntitle: "{title}"\n---\n\n'
 
 
+def source_link(src_rel: str) -> str:
+    """页末指向真实源文件的链接。
+
+    站点页面全是生成物，Quarto 自带的 repo-actions 会按页面自己的路径拼链接
+    （index.md、days/day00.md），那些文件在仓库里不存在，点开是 404。
+    """
+    return (f'\n\n::: {{.source-link}}\n'
+            f'[在 GitHub 上查看本页源文件]({GH}/{src_rel})\n:::\n')
+
+
 def strip_h1(text: str):
     """Quarto 用 frontmatter 的 title 生成标题，正文里的 H1 要去掉，否则重复。"""
     m = re.search(r"^#\s+(.+)$", text, re.M)
@@ -183,7 +193,7 @@ def main():
             # 「在线阅读」那行在站点上是指向本站，删掉；徽章保留
             body = "\n".join(l for l in body.split("\n")
                              if not l.startswith("**在线阅读："))
-        write(SRC / dst, frontmatter(title) + body, written)
+        write(SRC / dst, frontmatter(title) + body + source_link(src), written)
 
     days = []
     for d in sorted((ROOT / "days").iterdir()):
@@ -193,7 +203,8 @@ def main():
             continue
         num = m.group(1)
         title, body = process(readme, in_day=True, daydir=d.name)
-        write(SRC / "days" / f"day{num}.md", frontmatter(title) + body, written)
+        write(SRC / "days" / f"day{num}.md",
+              frontmatter(title) + body + source_link(f"days/{d.name}/README.md"), written)
         days.append((num, title))
         res = d / "results"
         if res.is_dir():
@@ -206,7 +217,8 @@ def main():
     apps = []
     for f in sorted((ROOT / "appendix").glob("*.md")):
         title, body = process(f, in_day=False, in_sub=True)
-        write(SRC / "appendix" / f.name, frontmatter(title) + body, written)
+        write(SRC / "appendix" / f.name,
+              frontmatter(title) + body + source_link(f"appendix/{f.name}"), written)
         apps.append((f.stem, title))
     apps.sort(key=lambda a: a[1])          # 按标题「附录 A/B/C」排序，而不是按文件名
 

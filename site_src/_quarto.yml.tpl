@@ -14,7 +14,6 @@ website:
   description: "An embodied-AI stack from scratch — 72 days, 2 hours a day, on a Jetson."
   site-url: https://enkerewpo.github.io/tokens-to-torque/
   repo-url: https://github.com/enkerewpo/tokens-to-torque
-  repo-actions: [source]
   favicon: assets/favicon.svg
   search:
     location: navbar
