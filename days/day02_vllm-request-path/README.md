@@ -31,26 +31,24 @@ v1 引擎把工作分给两个进程。API 进程处理 HTTP、分词、按模�
 
 这些细节今天不需要深究。要记住的是：**每个 token 都要跨一次进程边界**，所以这条通道的开销直接落在 §4 量到的 token 间隔上。
 
-下面这张图是动的：箭头上飞过的方块就是这一步交给下一个模块的东西，GPU 那一格在前向期间变亮。跟着看一遍，就知道一个 token 要经过哪些手。
-
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="../../site_src/assets/fig-engine-loop-dark.svg">
-  <img class="fig" alt="一条请求在 vLLM 引擎里的流动：文本进入 API 进程被分词，作为 Request 经 ZMQ 交给引擎；调度器产出这一步算谁、各算几个 token、KV 块在哪，交给 GPU 做一次前向并采样；新 token 一路回到调度器继续下一步，同时经 OutputProcessor 变回文本推给客户端" src="../../site_src/assets/fig-engine-loop-light.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="../../site_src/assets/fig-request-path-dark.svg">
+  <img class="fig" alt="请求路径：文本进 API 进程分词，作为 Request 经 ZMQ 交给引擎；调度器给出这一步算谁、各几个 token、KV 块在哪；GPU 前向并采样；新 token 回到调度器继续，同时变回文本推给客户端" src="../../site_src/assets/fig-request-path-light.svg">
 </picture>
 
-几处值得注意。**跨进程只发生两次**：请求进去一次，输出回来一次，中间的调度和前向都在引擎进程里完成。**GPU 一步只被调用一次**，这一次里所有在跑的请求一起算，这就是批处理。**橙色那条回边是主循环**：请求没答完就再走一轮调度和前向，所以生成 128 个 token 就要点亮 GPU 128 次。
+三处值得注意。**跨进程只发生两次**：请求进去一次，输出回来一次，中间的调度和前向都在引擎进程里完成。**GPU 一步只被调用一次**，这一次里所有在跑的请求一起算，这就是批处理。**橙色那条回边是主循环**：请求没答完就再走一轮，所以生成 64 个 token 要走 65 轮。
 
-图里各段传的东西：
+图上箭头只写了名字，各自装的内容如下：
 
-| 从 | 到 | 传的是什么 |
-|---|---|---|
-| 用户 | API 进程 | 一段文本，加上 `max_tokens`、`temperature` 这些采样参数 |
-| InputProcessor | EngineCoreClient | token id 序列，模板已经拼好 |
-| API 进程 | EngineCore 进程 | 一个 `Request`：token、采样参数、请求 id |
-| Scheduler | Worker | `SchedulerOutput`：这一步算哪些请求、各算几个 token、它们的 KV 块在哪 |
-| Worker | Scheduler | 采样出的新 token id |
-| EngineCore | API 进程 | `EngineCoreOutputs`：新 token、是否结束、结束原因 |
-| OutputProcessor | 用户 | 一小段文本 |
+| 传递 | 内容 |
+|---|---|
+| 文本 + 采样参数 | 用户的提示，加上 `max_tokens`、`temperature` 这些 |
+| token ids | 过完 chat template 的 token 序列 |
+| `Request` | token、采样参数、请求 id，引擎里一条请求的全部状态 |
+| `SchedulerOutput` | 这一步算哪些请求、各算几个 token、它们的 KV 块在哪 |
+| 新 token 的 id | 这一步采样出来的结果，每条请求各一个 |
+| `EngineCoreOutputs` | 新 token、是否结束、结束原因 |
+| 一小段文本 | 解码回来的文本，按 SSE 逐块推给客户端 |
 
 ### 2.2 三个关键的类
 
@@ -91,6 +89,11 @@ def step(self) -> tuple[dict[int, EngineCoreOutputs], bool]:
 
 外层的 `run_busy_loop()` 只是反复调用 `step()`，并在没有请求时阻塞等待新请求。
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../../site_src/assets/fig-engine-step-dark.svg">
+  <img class="fig" alt="一次 step 分三段：调度在 CPU 上挑出这一步算谁，执行在 GPU 上做一次前向并采样，回写在 CPU 上更新各请求状态" src="../../site_src/assets/fig-engine-step-light.svg">
+</picture>
+
 ### 2.4 调度器眼里没有 prefill 和 decode
 
 [vllm/v1/core/sched/scheduler.py](https://github.com/vllm-project/vllm/blob/v0.22.1/vllm/v1/core/sched/scheduler.py#L329-L340) 开头的注释直接说明了它的模型：
@@ -123,6 +126,11 @@ def step(self) -> tuple[dict[int, EngineCoreOutputs], bool]:
 | `FINISHED_ABORTED` | 客户端断开或显式取消 |
 
 枚举里有一行注释值得注意：`PREEMPTED` 之后的所有值都算「已结束」，判断函数就是 `status > RequestStatus.PREEMPTED` 一个比较。所以往这个枚举中间插值会改变语义。
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../../site_src/assets/fig-request-states-dark.svg">
+  <img class="fig" alt="请求状态机：WAITING 被调度后进入 RUNNING；KV 块不够时被抢占回到队列；结束分为遇到结束符、到长度上限、客户端断开三种" src="../../site_src/assets/fig-request-states-light.svg">
+</picture>
 
 ## 3. 动手
 
@@ -255,6 +263,11 @@ Jetson AGX Thor（120 W），vLLM 0.22.1（NGC `26.06-py3` 容器），Qwen3.5-0
 | 排队的 4 条 | 5.42 到 5.44 s |
 
 第二批比第一批多花的 1.18 秒，就是它们在队列里等的时间。同一批内部的 8 条相差不到 30 毫秒，因为它们每一步都被放进同一个批次，同步前进。
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../../site_src/assets/fig-queue-measured-dark.svg">
+  <img class="fig" alt="实测：并发上限 8 时同时发 12 条，8 条进入批次、4 条等待；先进入的 4.26 秒完成，排队的 5.44 秒，差的 1.18 秒是等待时间" src="../../site_src/assets/fig-queue-measured-light.svg">
+</picture>
 
 这里也能看出 `max_num_seqs` 和 KV cache 是两个独立的限制。缓存能装 102 985 个 token，12 条请求最多用 12 × 2048 ≈ 24 600 个，远没到上限，排队完全是并发数上限造成的。day 04 会把这两个限制分开扫。
 

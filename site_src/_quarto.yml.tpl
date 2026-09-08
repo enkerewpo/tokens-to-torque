@@ -94,7 +94,7 @@ format:
     number-sections: false
     anchor-sections: true
     code-copy: true
-    code-overflow: scroll
+    code-overflow: wrap          # 长命令折行，不横着拖
     highlight-style: github
     html-math-method: katex
     link-external-newwindow: true

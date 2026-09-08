@@ -833,127 +833,253 @@ def fig_paged(p):
                "块之间不必连续，相同前缀还能共享")
 
 
-# ------------------------------------------------ 引擎主循环：数据流动画
-def fig_engine_loop(p):
-    """一条请求在引擎里流动的动画：模块之间传的是什么，GPU 什么时候在算。
+# ------------------------------------------------ 请求路径：箭头上标出传的东西
+def fig_request_path(p):
+    """左边 API 进程，右边 EngineCore 进程，每段箭头标出这一步交出去的东西。
 
-    动画只做一件事：让「传递」这个动作可见。每段箭头上飞过的方块就是这一步
-    交出去的东西，名字写在方块上。GPU 那一格在前向期间变亮，其余时间是暗的，
-    这样能看出每生成一个 token 都要让它算一次。
+    箭头上只写名字，各自的内容放正文的表里：图里塞长句会互相压，
+    也没法随页面缩放。
     """
-    W, H = 790, 560
-    T = 13.0                                   # 一轮的总时长
+    W, H = 790, 600
     b = [_defs(p)]
-    css = []
-
-    b.append(text(24, 30, "一条请求在引擎里的流动", fs(W, 1.06), p["fg"], weight="700"))
-    b.append(text(24, 52, "箭头上飞过的方块 = 这一步交给下一个模块的东西",
+    b.append(text(24, 30, "一条请求走过的对象", fs(W, 1.06), p["fg"], weight="700"))
+    b.append(text(24, 52, "箭头上写的是这一步交给下一个模块的东西",
                   fs(W, .8), p["sub"]))
 
-    # 两个进程的分区
-    b.append(f'<rect x="152" y="76" width="248" height="452" rx="10" fill="none" '
-             f'stroke="{p["line"]}" stroke-dasharray="6 5"/>')
-    b.append(f'<rect x="424" y="76" width="312" height="452" rx="10" fill="none" '
-             f'stroke="{p["line"]}" stroke-dasharray="6 5"/>')
-    b.append(text(162, 94, "API 进程", fs(W, .8), p["sub"], cls="s"))
-    b.append(text(434, 94, "EngineCore 进程", fs(W, .8), p["sub"], cls="s"))
+    BW, BH = 220, 52
+    user = Rect(20, 286, 108, 60)
+    api = Rect(164, 112, BW, BH)
+    inp = Rect(164, 204, BW, BH)
+    cli = Rect(164, 296, BW, BH)
+    outp = Rect(164, 412, BW, BH)
+    sse = Rect(164, 500, BW, BH)
+    sch = Rect(484, 204, BW, BH)
+    gpu = Rect(484, 304, BW, 76)
+    upd = Rect(484, 412, BW, BH)
 
-    BW, BH = 216, 44
-    user = Rect(24, 250, 112, 56)
-    api_in = Rect(168, 110, BW, BH)
-    inp = Rect(168, 178, BW, BH)
-    client = Rect(168, 246, BW, BH)
-    outp = Rect(168, 386, BW, BH)
-    sse = Rect(168, 454, BW, BH)
-    sched = Rect(440, 178, 208, BH)
-    gpu = Rect(440, 268, 208, 74)
-    upd = Rect(440, 386, 208, BH)
+    b.append(f'<rect x="150" y="80" width="248" height="490" rx="10" fill="none" '
+             f'stroke="{p["line"]}" stroke-dasharray="6 5"/>')
+    b.append(f'<rect x="470" y="80" width="248" height="490" rx="10" fill="none" '
+             f'stroke="{p["line"]}" stroke-dasharray="6 5"/>')
+    b.append(text(160, 98, "API 进程", fs(W, .8), p["sub"], cls="s"))
+    b.append(text(480, 98, "EngineCore 进程", fs(W, .8), p["sub"], cls="s"))
 
     b.append(_card(p, user, "用户", "prompt", mono=False))
-    b.append(_card(p, api_in, "/v1/chat/completions", "FastAPI"))
+    b.append(_card(p, api, "/v1/chat/completions", "FastAPI"))
     b.append(_card(p, inp, "InputProcessor", "分词 + chat template"))
-    b.append(_card(p, client, "EngineCoreClient", "序列化后经 ZMQ 发出"))
-    b.append(_card(p, sched, "Scheduler", "schedule()", stroke=GREEN))
+    b.append(_card(p, cli, "EngineCoreClient", "序列化后经 ZMQ 发出"))
+    b.append(_card(p, sch, "Scheduler", "schedule()", stroke=GREEN))
     b.append(_card(p, outp, "OutputProcessor", "token → 文本"))
     b.append(_card(p, sse, "SSE", "逐块推给客户端"))
     b.append(_card(p, upd, "Scheduler", "update_from_output()"))
 
-    # GPU：单独画，前向期间会变亮
-    b.append(box(gpu.x, gpu.y, gpu.w, gpu.h, p["dim"], p["line"], rx=8))
-    # 前向期间点亮：单独一层绿色，只动它的透明度和边框，不动底色
-    b.append(f'<rect class="gpu" x="{gpu.x}" y="{gpu.y}" width="{gpu.w}" height="{gpu.h}" '
-             f'rx="8" fill="{GREEN}" fill-opacity="0" stroke="{GREEN}" stroke-opacity="0" '
-             f'stroke-width="1.6"/>')
+    b.append(box(gpu.x, gpu.y, gpu.w, gpu.h, p["dim"], BLUE, rx=8))
     b.append(text(gpu.cx, gpu.y + 26, "Worker · GPU", fs(W), p["fg"], anchor="middle",
                   weight="600", cls="m"))
-    b.append(text(gpu.cx, gpu.y + 48, "CUDA graph 重放一次前向", fs(W, .82), p["sub"],
+    b.append(text(gpu.cx, gpu.y + 47, "CUDA graph 重放一次前向", fs(W, .8), p["sub"],
                   anchor="middle", cls="s"))
-    b.append(text(gpu.cx, gpu.y + 66, "再采样出下一个 token", fs(W, .82), p["sub"],
+    b.append(text(gpu.cx, gpu.y + 65, "再采样出下一个 token", fs(W, .8), p["sub"],
                   anchor="middle", cls="s"))
-    css.append(f".gpu{{animation:gpuOn {T}s linear infinite}}"
-               "@keyframes gpuOn{0%,33%{fill-opacity:0;stroke-opacity:0}"
-               "35%,48%{fill-opacity:.13;stroke-opacity:1}"
-               "50%,100%{fill-opacity:0;stroke-opacity:0}}")
 
-    def seg(x1, y1, x2, y2, color):
+    def arrow(x1, y1, x2, y2, color):
         return (f'<path d="M{x1} {y1}L{x2} {y2}" stroke="{color}" stroke-width="1.7" '
                 f'fill="none" marker-end="url(#qa)"/>')
 
-    b.append(seg(user.x + user.w, user.cy - 30, api_in.x - 8, api_in.cy, p["sub"]))       # 用户 → 接口
-    b.append(seg(api_in.cx, api_in.bottom, api_in.cx, inp.top - 4, p["sub"]))
-    b.append(seg(inp.cx, inp.bottom, inp.cx, client.top - 4, p["sub"]))
-    b.append(seg(client.x + client.w, client.cy, sched.x - 8, sched.cy, GREEN))  # 跨进程
-    b.append(seg(sched.cx, sched.bottom, sched.cx, gpu.top - 4, GREEN))
-    b.append(seg(gpu.cx, gpu.bottom, gpu.cx, upd.top - 4, BLUE))
-    b.append(seg(upd.x, upd.cy, outp.x + outp.w + 8, outp.cy, BLUE))            # 回到 API 进程
-    b.append(seg(outp.cx, outp.bottom, outp.cx, sse.top - 4, p["sub"]))
-    b.append(seg(sse.x, sse.cy, user.cx, sse.cy, p["sub"]))                     # → 用户
-    b.append(seg(user.cx, sse.cy - 6, user.cx, user.bottom + 8, p["sub"]))
+    def midlabel(a_, c_, s_, color):
+        """两个上下相邻的盒子之间，把名字写在间隙正中。"""
+        return text(a_.cx + 10, (a_.bottom + c_.top) / 2 + 5, s_, fs(W, .78), color, cls="s")
 
-    # 主循环：更新完回到调度
-    loop_x = gpu.x + gpu.w + 34
-    b.append(f'<path d="M{upd.x + upd.w} {upd.cy}H{loop_x}V{sched.cy}H{sched.x + sched.w + 6}" '
+    b.append(arrow(user.x + user.w, user.cy - 40, api.x - 8, api.cy, p["sub"]))
+    b.append(text(user.cx, user.y - 12, "文本 + 采样参数", fs(W, .78), p["sub"],
+                  anchor="middle", cls="s"))
+
+    b.append(arrow(api.cx, api.bottom, api.cx, inp.top - 4, p["sub"]))
+    b.append(arrow(inp.cx, inp.bottom, inp.cx, cli.top - 4, p["sub"]))
+    b.append(midlabel(inp, cli, "token ids", p["sub"]))
+
+    b.append(arrow(cli.x + cli.w, cli.cy, sch.x - 8, sch.cy, GREEN))
+    b.append(text((cli.x + cli.w + sch.x) / 2, cli.cy - 18, "Request", fs(W, .82), GREEN,
+                  anchor="middle", weight="600", cls="m"))
+
+    b.append(arrow(sch.cx, sch.bottom, sch.cx, gpu.top - 4, GREEN))
+    b.append(midlabel(sch, gpu, "SchedulerOutput", GREEN))
+
+    b.append(arrow(gpu.cx, gpu.bottom, gpu.cx, upd.top - 4, BLUE))
+    b.append(midlabel(gpu, upd, "新 token 的 id", BLUE))
+
+    b.append(arrow(upd.x, upd.cy, outp.x + outp.w + 8, outp.cy, BLUE))
+    b.append(text((outp.x + outp.w + upd.x) / 2, upd.cy - 14, "EngineCoreOutputs",
+                  fs(W, .8), BLUE, anchor="middle", weight="600", cls="m"))
+
+    b.append(arrow(outp.cx, outp.bottom, outp.cx, sse.top - 4, p["sub"]))
+    b.append(arrow(sse.x, sse.cy, user.cx, sse.cy, p["sub"]))
+    b.append(arrow(user.cx, sse.cy - 6, user.cx, user.bottom + 8, p["sub"]))
+    b.append(text(user.cx + 8, sse.cy - 12, "一小段文本", fs(W, .78), p["sub"], cls="s"))
+
+    loop_x = gpu.x + gpu.w + 30
+    b.append(f'<path d="M{upd.x + upd.w} {upd.cy}H{loop_x}V{sch.cy}H{sch.x + sch.w + 6}" '
              f'stroke="{AMBER}" stroke-width="1.7" fill="none" marker-end="url(#qa)"/>')
-    b.append(text(loop_x + 7, (sched.cy + upd.cy) / 2 - 7, "没答完", fs(W, .8), AMBER, cls="s"))
-    b.append(text(loop_x + 7, (sched.cy + upd.cy) / 2 + 11, "再来一步", fs(W, .8), AMBER, cls="s"))
+    b.append(text(loop_x + 6, (sch.cy + upd.cy) / 2 - 7, "没答完", fs(W, .78), AMBER, cls="s"))
+    b.append(text(loop_x + 6, (sch.cy + upd.cy) / 2 + 11, "再走一轮", fs(W, .78), AMBER, cls="s"))
+    return svg(W, H, "".join(b), label=(
+        "请求路径：文本进 API 进程分词，作为 Request 经 ZMQ 交给引擎；调度器给出这一步"
+        "算谁、各几个 token、KV 块在哪；GPU 前向并采样；新 token 回到调度器继续，"
+        "同时变回文本推给客户端"))
 
-    # 飞过的数据块：(标签, 起点, 终点, 颜色, 出现时刻, 持续)
-    chips = [
-        ("文本", (user.x + user.w + 4, user.cy - 30), (api_in.x - 10, api_in.cy), p["sub"], 0.0, 1.3),
-        ("token ids", (inp.cx, inp.bottom + 4), (inp.cx, client.top - 6), BLUE, 1.5, 1.3),
-        ("Request", (client.x + client.w + 4, client.cy), (sched.x - 8, sched.cy), GREEN, 3.0, 1.3),
-        ("SchedulerOutput：算谁 · 各几个 token · KV 块表",
-         (sched.cx, sched.bottom + 4), (sched.cx, gpu.top - 6), GREEN, 4.5, 1.3),
-        ("新 token 的 id", (gpu.cx, gpu.bottom + 4), (gpu.cx, upd.top - 6), BLUE, 6.4, 1.3),
-        ("EngineCoreOutputs", (upd.x - 4, upd.cy), (outp.x + outp.w + 8, outp.cy), BLUE, 8.0, 1.3),
-        ("一小段文本", (sse.x - 4, sse.cy), (user.cx + 40, sse.cy), p["sub"], 9.6, 1.3),
-    ]
-    for i, (label, (x1, y1), (x2, y2), color, t0, dur) in enumerate(chips):
-        w = max(66, len(label) * (5.6 if any(c > "\u4e00" for c in label) else 4.2) + 18)
-        b.append(f'<g class="chip c{i}">'
-                 f'<rect x="{-w / 2:.1f}" y="-11" width="{w:.1f}" height="22" rx="5" '
-                 f'fill="{color}" fill-opacity=".14" stroke="{color}" stroke-width="1"/>'
-                 + text(0, 5, label, fs(W, .76), color, anchor="middle", cls="s") +
-                 "</g>")
-        a0, a1 = t0 / T * 100, (t0 + dur) / T * 100
-        css.append(
-            f"@keyframes c{i}{{"
-            f"0%,{a0:.3f}%{{opacity:0;transform:translate({x1:.1f}px,{y1:.1f}px)}}"
-            f"{a0 + .3:.3f}%{{opacity:1;transform:translate({x1:.1f}px,{y1:.1f}px)}}"
-            f"{a1 - .3:.3f}%{{opacity:1;transform:translate({x2:.1f}px,{y2:.1f}px)}}"
-            f"{a1:.3f}%,100%{{opacity:0;transform:translate({x2:.1f}px,{y2:.1f}px)}}}}"
-            f".c{i}{{animation:c{i} {T}s linear infinite}}")
 
-    # 不跑动画的渲染器（GitHub 缩略图、rsvg）里 transform 不生效，
-    # 全部叠在原点会糊成一团，所以默认全部隐藏，动画负责显示。
-    css.append(".chip{opacity:0}")
-    css.append("@media (prefers-reduced-motion: reduce){"
-               ".chip,.gpu{animation:none}.chip{opacity:1}}")
-    return svg(W, H, "".join(b), css="".join(css), label=(
-        "一条请求在 vLLM 引擎里的流动：文本进入 API 进程被分词，作为 Request 经 ZMQ "
-        "交给引擎；调度器产出这一步算谁、各算几个 token、KV 块在哪，交给 GPU 做一次"
-        "前向并采样；新 token 一路回到调度器继续下一步，同时经 OutputProcessor 变回"
-        "文本推给客户端"))
+# ------------------------------------------------ 一次 step 里发生什么
+def fig_engine_step(p):
+    """一次 step 的三段，以及 §4 实测的两个数。"""
+    W, H = 750, 300
+    b = [_defs(p)]
+    b.append(text(24, 30, "一次 step 的三段", fs(W, 1.06), p["fg"], weight="700"))
+    b.append(text(24, 52, "调度和回写在 CPU 上，中间那段在 GPU 上", fs(W, .8), p["sub"]))
+
+    LANE_Y = {"CPU": 96, "GPU": 172}
+    for lane, y in LANE_Y.items():
+        b.append(text(24, y + 30, lane, fs(W, .88), p["sub"], weight="600", cls="m"))
+        b.append(f'<line x1="70" y1="{y + 25}" x2="{W - 30}" y2="{y + 25}" '
+                 f'stroke="{p["line"]}" stroke-dasharray="4 4"/>')
+
+    segs = [("schedule()", 84, 190, "CPU", GREEN, "挑出这一步算哪些请求，各分几个 token"),
+            ("execute_model()", 292, 250, "GPU", BLUE, "一次前向，采样出新 token"),
+            ("update_from_output()", 512, 208, "CPU", GREEN, "写回各请求，判断谁结束")]
+    for name, x, w, lane, color, note in segs:
+        y = LANE_Y[lane]
+        b.append(box(x, y, w, 50, p["box"], color, rx=7))
+        b.append(text(x + w / 2, y + 30, name, fs(W, .92), p["fg"], anchor="middle",
+                      weight="600", cls="m"))
+        if lane == "GPU":
+            b.append(f'<path d="M{x - 6} {LANE_Y["CPU"] + 50}L{x + 20} {y - 4}" '
+                     f'stroke="{p["sub"]}" stroke-width="1.5" marker-end="url(#qa)"/>')
+            b.append(f'<path d="M{x + w - 20} {y}L{x + w + 6} {LANE_Y["CPU"] + 50}" '
+                     f'stroke="{p["sub"]}" stroke-width="1.5" marker-end="url(#qa)"/>'
+                     .replace(f'M{x + w - 20} {y}', f'M{x + w - 20} {y - 4}'))
+
+    b.append(text(24, 254, "实测（Qwen3.5-0.8B，见 §4）：提示 20 个 token 的那一步用了 28.2 ms；"
+                           "之后每步只出一个 token，间隔 10.9 ms",
+                  fs(W, .82), p["sub"], cls="s"))
+    b.append(text(24, 276, "所以一条生成 64 个 token 的请求，要把这三段重复 65 次",
+                  fs(W, .82), p["sub"], cls="s"))
+    return svg(W, H, "".join(b), label=(
+        "一次 step 分三段：调度在 CPU 上挑出这一步算谁，执行在 GPU 上做一次前向并采样，"
+        "回写在 CPU 上更新各请求状态"))
+
+
+# ------------------------------------------------ 请求的状态机
+def fig_request_states(p):
+    W, H = 830, 268
+    b = [_defs(p)]
+    b.append(text(24, 30, "一条请求的状态", fs(W, 1.06), p["fg"], weight="700"))
+    b.append(text(24, 52, "PREEMPTED 之后的状态都算已结束，判断就是一个大小比较",
+                  fs(W, .8), p["sub"]))
+
+    wait = Rect(30, 96, 150, 52)
+    run = Rect(240, 96, 150, 52)
+    pre = Rect(240, 184, 150, 52)
+    fin = Rect(430, 62, 248, 50)
+    cap = Rect(430, 124, 248, 50)
+    ab = Rect(430, 186, 248, 50)
+
+    b.append(_card(p, wait, "WAITING"))
+    b.append(_card(p, run, "RUNNING", stroke=GREEN))
+    b.append(_card(p, pre, "PREEMPTED", stroke=AMBER))
+    b.append(_card(p, fin, "FINISHED_STOPPED"))
+    b.append(_card(p, cap, "FINISHED_LENGTH_CAPPED"))
+    b.append(_card(p, ab, "FINISHED_ABORTED"))
+
+    def a(x1, y1, x2, y2, color=None):
+        return (f'<path d="M{x1} {y1}L{x2} {y2}" stroke="{color or p["sub"]}" '
+                f'stroke-width="1.6" fill="none" marker-end="url(#qa)"/>')
+
+    b.append(a(wait.x + wait.w, wait.cy, run.x - 8, run.cy, GREEN))
+    b.append(text((wait.x + wait.w + run.x) / 2, wait.cy - 16, "被调度选中", fs(W, .78),
+                  GREEN, anchor="middle", cls="s"))
+    b.append(a(run.cx, run.bottom, run.cx, pre.top - 8, AMBER))
+    b.append(text(run.cx + 12, (run.bottom + pre.top) / 2 + 4, "KV 块不够，被抢占",
+                  fs(W, .78), AMBER, cls="s"))
+    b.append(f'<path d="M{pre.x} {pre.cy}H{wait.cx}V{wait.bottom + 6}" stroke="{AMBER}" '
+             f'stroke-width="1.6" fill="none" marker-end="url(#qa)"/>')
+    b.append(text(wait.cx + 8, pre.cy - 10, "块已释放，重新排队", fs(W, .78), AMBER, cls="s"))
+    b.append(a(run.x + run.w, run.cy - 14, fin.x - 8, fin.cy))
+    b.append(a(run.x + run.w, run.cy, cap.x - 8, cap.cy))
+    b.append(a(run.x + run.w, run.cy + 14, ab.x - 8, ab.cy))
+    b.append(text(fin.x + fin.w + 10, fin.cy + 5, "遇到结束符", fs(W, .78), p["sub"], cls="s"))
+    b.append(text(cap.x + cap.w + 10, cap.cy + 5, "到长度上限", fs(W, .78), p["sub"], cls="s"))
+    b.append(text(ab.x + ab.w + 10, ab.cy + 5, "客户端断开", fs(W, .78), p["sub"], cls="s"))
+    return svg(W, H, "".join(b), label=(
+        "请求状态机：WAITING 被调度后进入 RUNNING；KV 块不够时被抢占回到队列；"
+        "结束分为遇到结束符、到长度上限、客户端断开三种"))
+
+
+# ------------------------------------------------ 12 条请求撞上 8 个位置（实测）
+def fig_queue_measured(p):
+    """把 code/watch_sched.py 采到的数据画出来，数字全部来自 §4。"""
+    W, H = 750, 430
+    X0, XW, T_MAX = 86, 592, 5.8
+    b = [_defs(p)]
+    b.append(text(24, 30, "12 条请求撞上 8 个位置", fs(W, 1.06), p["fg"], weight="700"))
+    b.append(text(24, 52, "并发上限 8，同时发 12 条，每条最多 96 个 token",
+                  fs(W, .8), p["sub"]))
+
+    def tx(t):
+        return X0 + t / T_MAX * XW
+
+    # 上：调度器里的两条队列，堆叠画，不重叠
+    TOP, LH, UNIT = 88, 84, 7.0                 # UNIT：一条请求的高度
+    b.append(text(24, TOP + 12, "队列", fs(W, .82), p["sub"], weight="600", cls="s"))
+    b.append(f'<line x1="{X0}" y1="{TOP + LH}" x2="{X0 + XW}" y2="{TOP + LH}" '
+             f'stroke="{p["line"]}"/>')
+    # (起, 止, 在跑, 在等)，来自 results/watch_sched.txt
+    spans = [(3.03, 4.29, 8, 4), (4.29, 4.40, 1, 3), (4.40, 5.44, 4, 0)]
+    for t0, t1, run, wait in spans:
+        x, w = tx(t0), tx(t1) - tx(t0)
+        hr = run * UNIT
+        b.append(f'<rect x="{x:.1f}" y="{TOP + LH - hr:.1f}" width="{w:.1f}" '
+                 f'height="{hr:.1f}" fill="{GREEN}" fill-opacity=".7"/>')
+        if wait:
+            hw = wait * UNIT
+            b.append(f'<rect x="{x:.1f}" y="{TOP + LH - hr - hw:.1f}" width="{w:.1f}" '
+                     f'height="{hw:.1f}" fill="{AMBER}" fill-opacity=".45"/>')
+    b.append(text(tx(3.1), TOP + LH - 8 * UNIT - 4 * UNIT - 8, "4 条在等",
+                  fs(W, .78), AMBER, cls="s"))
+    b.append(text(tx(3.1), TOP + LH - 8 * UNIT + 16, "8 条在跑", fs(W, .78), "#3d6600", cls="s"))
+    b.append(text(tx(4.45), TOP + LH - 4 * UNIT - 8, "空出位置，等的 4 条补进来",
+                  fs(W, .78), p["sub"], cls="s"))
+
+    # 下：12 条各自的端到端时间
+    BY, BH2, GAP = 200, 9, 4
+    b.append(text(24, BY + 12, "各条", fs(W, .82), p["sub"], weight="600", cls="s"))
+    for i in range(12):
+        first = i < 8
+        y = BY + i * (BH2 + GAP)
+        b.append(f'<rect x="{X0}" y="{y}" width="{tx(4.26) - X0:.1f}" height="{BH2}" '
+                 f'rx="2" fill="{GREEN}" fill-opacity=".75"/>')
+        if not first:
+            b.append(f'<rect x="{tx(4.26):.1f}" y="{y}" width="{tx(5.44) - tx(4.26):.1f}" '
+                     f'height="{BH2}" rx="2" fill="{AMBER}" fill-opacity=".85"/>')
+        b.append(text(X0 - 8, y + BH2, f"R{i + 1}", fs(W, .7), p["sub"], anchor="end", cls="m"))
+
+    # 时间轴
+    AX = BY + 12 * (BH2 + GAP) + 6
+    b.append(f'<line x1="{X0}" y1="{AX}" x2="{X0 + XW}" y2="{AX}" stroke="{p["line"]}"/>')
+    for t in range(6):
+        b.append(f'<line x1="{tx(t):.1f}" y1="{AX}" x2="{tx(t):.1f}" y2="{AX + 4}" '
+                 f'stroke="{p["line"]}"/>')
+        b.append(text(tx(t), AX + 18, str(t), fs(W, .74), p["sub"], anchor="middle", cls="m"))
+    b.append(text(X0 + XW, AX + 18, "秒", fs(W, .74), p["sub"], anchor="end", cls="s"))
+
+    # 图例
+    LY = AX + 42
+    b.append(f'<rect x="{X0}" y="{LY - 9}" width="14" height="10" rx="2" '
+             f'fill="{GREEN}" fill-opacity=".75"/>')
+    b.append(text(X0 + 22, LY, "在批次里算：先进入的 8 条 4.26 s", fs(W, .78), p["sub"], cls="s"))
+    b.append(f'<rect x="{X0 + 300}" y="{LY - 9}" width="14" height="10" rx="2" '
+             f'fill="{AMBER}" fill-opacity=".85"/>')
+    b.append(text(X0 + 322, LY, "在队列里等：排队的 4 条多花 1.18 s", fs(W, .78), p["sub"], cls="s"))
+    return svg(W, H, "".join(b), label=(
+        "实测：并发上限 8 时同时发 12 条，8 条进入批次、4 条等待；先进入的 4.26 秒完成，"
+        "排队的 5.44 秒，差的 1.18 秒是等待时间"))
 
 
 def main():
@@ -968,7 +1094,10 @@ def main():
                      "fig-multihead-shapes": fig_multihead_shapes,
                      "fig-batching": fig_batching,
                      "fig-paged": fig_paged,
-                     "fig-engine-loop": fig_engine_loop}.items():
+                     "fig-request-path": fig_request_path,
+                     "fig-engine-step": fig_engine_step,
+                     "fig-request-states": fig_request_states,
+                     "fig-queue-measured": fig_queue_measured}.items():
         for suffix, pal in (("light", LIGHT), ("dark", DARK)):
             (OUT / f"{name}-{suffix}.svg").write_text(fn(pal))
         print(f"  {name}  {(OUT / f'{name}-light.svg').stat().st_size} 字节")

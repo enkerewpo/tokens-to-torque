@@ -62,12 +62,27 @@ code:not(.sourceCode) {
 
 
 /* ---- 代码块 ---- */
-div.sourceCode, pre:not(.mermaid) {
+/* 边框只画最外层。内外各画一层的话，横向滚动时能看到里面那层的边跟着动，
+   看起来像多出一个浅框。 */
+div.sourceCode {
   border: 1px solid #3A404A;
   border-radius: 8px;
   background: #1B1F26;
 }
-div.sourceCode pre, pre > code { font-size: .84rem; line-height: 1.62; }
+div.sourceCode > pre { border: 0; border-radius: 0; background: transparent; }
+pre:not(.mermaid):not(div.sourceCode > pre) {
+  border: 1px solid #3A404A;
+  border-radius: 8px;
+  background: #1B1F26;
+}
+/* 右边留出复制按钮的位置，否则按钮压在代码上 */
+div.sourceCode pre, pre > code {
+  font-size: .84rem;
+  line-height: 1.62;
+  padding-right: 2.6rem;
+}
+/* 折行：长命令按版心宽度换行，长路径也要能断开 */
+div.sourceCode pre code, pre > code { overflow-wrap: anywhere; }
 
 /* ---- 源码卡片：GitHub 图标 + 路径 + 行号 + 跳转 ---- */
 .srccard {
