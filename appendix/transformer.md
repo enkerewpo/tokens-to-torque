@@ -121,8 +121,10 @@ $$
 
 结果被 $\mathbf{v}_1$ 主导——「它」这个位置的新表示里，装的主要是「书」的内容。**这就是注意力的全部。** 后面所有的公式和优化，都是这三步的高效批量版本。
 
-![](../site_src/assets/fig-attention-light.svg){.fig .light-content fig-alt="注意力三步：查询与每个键做内积得到分数，softmax 变成和为一的权重，再按权重把各位置的值加权求和"}
-![](../site_src/assets/fig-attention-dark.svg){.fig .dark-content fig-alt="注意力三步：查询与每个键做内积得到分数，softmax 变成和为一的权重，再按权重把各位置的值加权求和"}
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../site_src/assets/fig-attention-dark.svg">
+  <img class="fig" alt="注意力三步：查询与每个键做内积得到分数，softmax 变成和为一的权重，再按权重把各位置的值加权求和" src="../site_src/assets/fig-attention-light.svg">
+</picture>
 
 ### 写成矩阵
 
@@ -162,13 +164,17 @@ $$
 >
 > 在代码里“切”和“拼”都只是 `reshape`：同一块数据，$(T, 4096)$ 换个看法成 $(T, 16, 256)$，算完再换回来，**一次乘法都没有**。真正在算的是每段里的注意力，以及最后那个 `o_proj`。
 
-![](../site_src/assets/fig-multihead-light.svg){.fig .light-content fig-alt="多头注意力：4096 维的查询、键、值各切成 16 段，每段 256 维各自算一张 T×T 权重表，输出拼回 4096 维后过 o_proj"}
-![](../site_src/assets/fig-multihead-dark.svg){.fig .dark-content fig-alt="多头注意力：4096 维的查询、键、值各切成 16 段，每段 256 维各自算一张 T×T 权重表，输出拼回 4096 维后过 o_proj"}
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../site_src/assets/fig-multihead-dark.svg">
+  <img class="fig" alt="多头注意力：4096 维的查询、键、值各切成 16 段，每段 256 维各自算一张 T×T 权重表，输出拼回 4096 维后过 o_proj" src="../site_src/assets/fig-multihead-light.svg">
+</picture>
 
 **整层的形状怎么变。** 把这三步放回一层里，张量的形状是这样走的。写法和 PyTorch 一致：$T$ 是这次输入的 token 数，`@` 是 Python 的矩阵乘法运算符（`a @ b` 就是矩阵 $a$ 乘矩阵 $b$，NumPy 和 PyTorch 都用它），$k^{\top}$ 是 $k$ 的转置——行列互换（[附录 A.1](linear-algebra.md)）。
 
-![](../site_src/assets/fig-multihead-shapes-light.svg){.fig .light-content fig-alt="一层注意力里张量形状的变化：(T,4096) 拆头成 (16,T,256)，算出 (16,T,T) 的权重，输出 (16,T,256)，合头回 (T,4096)"}
-![](../site_src/assets/fig-multihead-shapes-dark.svg){.fig .dark-content fig-alt="一层注意力里张量形状的变化：(T,4096) 拆头成 (16,T,256)，算出 (16,T,T) 的权重，输出 (16,T,256)，合头回 (T,4096)"}
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../site_src/assets/fig-multihead-shapes-dark.svg">
+  <img class="fig" alt="一层注意力里张量形状的变化：(T,4096) 拆头成 (16,T,256)，算出 (16,T,T) 的权重，输出 (16,T,256)，合头回 (T,4096)" src="../site_src/assets/fig-multihead-shapes-light.svg">
+</picture>
 
 一句话记住：**进来 $(T, 4096)$，出去还是 $(T, 4096)$**。注意力只改内容、不改形状，所以 32 层才能一层接一层地摞起来。中间冒出来的 $(16, T, T)$ 就是那 16 张权重表，也是显存和计算量真正的大头。
 
@@ -289,8 +295,10 @@ $$
 - **prefill**：把用户输入的 $T$ 个 token 一次性喂进去，算出所有位置的 K、V 存好，并产出第一个输出 token。这一步是计算密集的（大矩阵乘法）。
 - **decode**：之后每一步只算**一个**新位置的 Q、K、V，读取缓存里已有的 K、V 做注意力，再把新的 K、V 追加进去。这一步是访存密集的（矩阵乘向量，算得少读得多）。
 
-![](../site_src/assets/fig-kv-cache-light.svg){.fig .light-content fig-alt="prefill 一次算完整个输入的 K、V 并存进缓存；decode 每步只算一个新位置，读缓存做注意力再把新的 K、V 追加进去"}
-![](../site_src/assets/fig-kv-cache-dark.svg){.fig .dark-content fig-alt="prefill 一次算完整个输入的 K、V 并存进缓存；decode 每步只算一个新位置，读缓存做注意力再把新的 K、V 追加进去"}
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../site_src/assets/fig-kv-cache-dark.svg">
+  <img class="fig" alt="prefill 一次算完整个输入的 K、V 并存进缓存；decode 每步只算一个新位置，读缓存做注意力再把新的 K、V 追加进去" src="../site_src/assets/fig-kv-cache-light.svg">
+</picture>
 
 **缓存要多大。** 每个 token、每层要存 K 和 V 各一份：
 

@@ -61,8 +61,10 @@ A\in\mathbb{R}^{r\times d_{\text{in}}},\quad
 r\ll\min(d_{\text{in}},d_{\text{out}})
 $$
 
-![](../../site_src/assets/fig-lora-arch-light.svg){.fig .light-content fig-alt="LoRA 在一个线性层里的结构"}
-![](../../site_src/assets/fig-lora-arch-dark.svg){.fig .dark-content fig-alt="LoRA 在一个线性层里的结构"}
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../../site_src/assets/fig-lora-arch-dark.svg">
+  <img class="fig" alt="LoRA 在一个线性层里的结构" src="../../site_src/assets/fig-lora-arch-light.svg">
+</picture>
 
 $W_0$ 冻结不动，只训练 $A$ 和 $B$。前向变成 $\mathbf{y} = W_0\mathbf{x} + \frac{\alpha}{r}B(A\mathbf{x})$：原来那条路照常算，旁边多一条“先把 $\mathbf{x}$ 压到 $r$ 维、再展开回 $d_{\text{out}}$ 维”的支路，两条相加。两路输出都是 $d_{\text{out}}$ 维，所以能逐元素相加。$\alpha/r$ 是缩放约定，§2.5 会讲。
 
@@ -131,8 +133,10 @@ $m$ 是梯度的平均（方向），$v$ 是梯度平方的平均（尺度）。
 
 换句话说，bf16 那份是「用完就可以扔、随时能从正本再生成」的，fp32 正本才是真正被训练的东西。
 
-![](../../site_src/assets/fig-train-step-light.svg){.fig .light-content fig-alt="一步训练里 bf16 工作副本与 fp32 正本各自何时被用到"}
-![](../../site_src/assets/fig-train-step-dark.svg){.fig .dark-content fig-alt="一步训练里 bf16 工作副本与 fp32 正本各自何时被用到"}
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../../site_src/assets/fig-train-step-dark.svg">
+  <img class="fig" alt="一步训练里 bf16 工作副本与 fp32 正本各自何时被用到" src="../../site_src/assets/fig-train-step-light.svg">
+</picture>
 
 先看一步训练里这些东西各自什么时候用到。设某个可训练参数是 $\theta$：
 
@@ -263,8 +267,10 @@ Qwen3.5 的做法是混着用：每 3 个线性注意力层配 1 个全注意力
 
 先看整条路：一串 token id 进来，经过 embedding、32 个块、一次归一化，最后由 `lm_head` 投到词表（vocabulary）上，得到每个词的分数（logits），softmax 成概率之后才采样（sampling）出下一个 token。每生成一个 token 都要把这条路走一遍。
 
-![](../../site_src/assets/fig-qwen-arch-light.svg){.fig .light-content fig-alt="Qwen3.5-9B 的主干：token ids 经 embedding、32 个 decoder 块、RMSNorm、lm_head 得到 logits，再 softmax 成下一个 token 的概率分布"}
-![](../../site_src/assets/fig-qwen-arch-dark.svg){.fig .dark-content fig-alt="Qwen3.5-9B 的主干：token ids 经 embedding、32 个 decoder 块、RMSNorm、lm_head 得到 logits，再 softmax 成下一个 token 的概率分布"}
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../../site_src/assets/fig-qwen-arch-dark.svg">
+  <img class="fig" alt="Qwen3.5-9B 的主干：token ids 经 embedding、32 个 decoder 块、RMSNorm、lm_head 得到 logits，再 softmax 成下一个 token 的概率分布" src="../../site_src/assets/fig-qwen-arch-light.svg">
+</picture>
 
 再看一个块里面。
 
@@ -284,8 +290,10 @@ Qwen3.5 的做法是混着用：每 3 个线性注意力层配 1 个全注意力
 
 两种层的**骨架完全一样**，都是两段残差：先归一化、过 mixer、把结果加回输入；再归一化、过前馈网络、再加回一次。区别只在中间那个 mixer——全注意力块里是 `self_attn`（分组查询注意力，带 RoPE 和 QK-Norm），线性注意力块里是 `linear_attn`（一个叫 GatedDeltaNet 的模块：一维卷积加一个随时间递推的状态）。前馈网络两种块共用同一种：SwiGLU。
 
-![](../../site_src/assets/fig-qwen-block-light.svg){.fig .light-content fig-alt="一个 decoder 块：输入先归一化再过 mixer，结果加回输入；再归一化过 SwiGLU 前馈网络，再加回一次。8 层用 self_attn，24 层用 linear_attn"}
-![](../../site_src/assets/fig-qwen-block-dark.svg){.fig .dark-content fig-alt="一个 decoder 块：输入先归一化再过 mixer，结果加回输入；再归一化过 SwiGLU 前馈网络，再加回一次。8 层用 self_attn，24 层用 linear_attn"}
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../../site_src/assets/fig-qwen-block-dark.svg">
+  <img class="fig" alt="一个 decoder 块：输入先归一化再过 mixer，结果加回输入；再归一化过 SwiGLU 前馈网络，再加回一次。8 层用 self_attn，24 层用 linear_attn" src="../../site_src/assets/fig-qwen-block-light.svg">
+</picture>
 
 图里绿色的名字就是 `nn.Linear`，灰色的是归一化、卷积和激活函数——后者没有权重矩阵可拆，LoRA 也就无从挂起。图在站点上可以点开放大。
 

@@ -102,8 +102,10 @@ GPU 一次只算一个请求时，矩阵形状很“瘦”，算力大部分闲�
 
 vLLM 的做法是**每一步都重新决定这一轮算哪些请求**：谁答完了就立刻离场，空出来的位置马上让排队的请求补上。
 
-![](../../site_src/assets/fig-batching-light.svg){.fig .light-content fig-alt="静态批处理里短请求算完要空等整批结束；连续批处理每步重新调度，请求答完即离场，新请求立刻补位"}
-![](../../site_src/assets/fig-batching-dark.svg){.fig .dark-content fig-alt="静态批处理里短请求算完要空等整批结束；连续批处理每步重新调度，请求答完即离场，新请求立刻补位"}
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../../site_src/assets/fig-batching-dark.svg">
+  <img class="fig" alt="静态批处理里短请求算完要空等整批结束；连续批处理每步重新调度，请求答完即离场，新请求立刻补位" src="../../site_src/assets/fig-batching-light.svg">
+</picture>
 
 day 04 会把并发从 1 加到 64，量出吞吐涨了多少、延迟又付出了什么。
 
@@ -115,8 +117,10 @@ day 04 会把并发从 1 加到 64，量出吞吐涨了多少、延迟又付出�
 
 vLLM 把缓存切成**固定大小的块**，谁要用就给谁几块，块之间不必挨着放，每条请求自己带一张表记着块的顺序——和操作系统的虚拟内存分页是同一个套路，所以这个机制叫 PagedAttention[^paged]。
 
-![](../../site_src/assets/fig-paged-light.svg){.fig .light-content fig-alt="按最大长度预留会白占大量缓存；分页按需分配固定大小的块，块之间不必连续，相同前缀还能共享"}
-![](../../site_src/assets/fig-paged-dark.svg){.fig .dark-content fig-alt="按最大长度预留会白占大量缓存；分页按需分配固定大小的块，块之间不必连续，相同前缀还能共享"}
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../../site_src/assets/fig-paged-dark.svg">
+  <img class="fig" alt="按最大长度预留会白占大量缓存；分页按需分配固定大小的块，块之间不必连续，相同前缀还能共享" src="../../site_src/assets/fig-paged-light.svg">
+</picture>
 
 这台机器上的真实数字，全在启动日志里：
 

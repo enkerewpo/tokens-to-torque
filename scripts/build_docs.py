@@ -80,20 +80,26 @@ def rewrite_links(text: str, in_day: bool, in_sub: bool = None) -> str:
     # 用的就是页面的字体和字号，缩放也跟着正文走。外面套一个 .lightbox 的链接
     # 保留点开放大。
     def _inline_svg(m):
-        rel, attrs = m.group(1), m.group(2)
-        f = SRC / rel
-        if not f.exists():
-            return m.group(0)
-        svg = f.read_text(encoding="utf-8").strip()
-        classes = " ".join(re.findall(r"\.([a-z][a-z0-9-]*)", attrs))
-        svg = re.sub(r'\s(?:width|height)="[\d.]+"', "", svg, count=2)
-        svg = svg.replace("<svg ", f'<svg class="{classes}" ', 1)
+        dark, cls, alt, light = m.group(1), m.group(2), m.group(3), m.group(4)
+        out = []
+        for rel, variant in ((light, "light-content"), (dark, "dark-content")):
+            f = SRC / rel
+            if not f.exists():
+                return m.group(0)
+            svg = f.read_text(encoding="utf-8").strip()
+            svg = re.sub(r'\s(?:width|height)="[\d.]+"', "", svg, count=2)
+            svg = svg.replace("<svg ", f'<svg class="{cls} {variant}" ', 1)
+            out.append(svg)
         # 不套 <a>：Quarto 自带的 glightbox 会抢过去，把 .svg 当图片打开，
         # 那样又回到系统字体了。放大交给 assets/figzoom.html 里的浮层。
-        return "```{=html}\n" + svg + "\n```"
+        return "```{=html}\n" + "\n".join(out) + "\n```"
 
-    text = re.sub(r"!\[\]\((?:\.\./)*site_src/(assets/[^)]+\.svg)\)\{([^}]*)\}",
-                  _inline_svg, text)
+    # 源文件里插图写成 <picture>（GitHub 原生支持按深浅色切图，属性不会当正文
+    # 打印出来）；这里把它换成内联的两份 SVG，靠 .light-content/.dark-content 切换。
+    text = re.sub(r'<picture>\s*<source media="\(prefers-color-scheme: dark\)" '
+                  r'srcset="(?:\.\./)*site_src/(assets/[^"]+)">\s*'
+                  r'<img class="([a-z]+)" alt="([^"]*)" src="(?:\.\./)*site_src/(assets/[^"]+)">\s*'
+                  r'</picture>', _inline_svg, text)
 
     # 图片资源在 site_src/assets/：源码里可能写成 site_src/… 或 ../site_src/…，
     # 统一改成相对站点的 assets/…（子目录页面要加 ../）

@@ -8,8 +8,10 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) ![Progress](https://img.shields.io/badge/progress-2%2F73_days-76B900.svg) ![Hardware](https://img.shields.io/badge/hardware-Jetson%20%2F%20any%20CUDA%20GPU-76B900.svg) ![Started](https://img.shields.io/badge/started-2026--09--04-informational.svg)
 
-![](site_src/assets/hero-light.svg){.hero .light-content fig-alt="从 token 到扭矩：serving、CUDA、training、VLM、VLA、WAM 六个阶段，72 天"}
-![](site_src/assets/hero-dark.svg){.hero .dark-content fig-alt="从 token 到扭矩：serving、CUDA、training、VLM、VLA、WAM 六个阶段，72 天"}
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="site_src/assets/hero-dark.svg">
+  <img class="hero" alt="从 token 到扭矩：serving、CUDA、training、VLM、VLA、WAM 六个阶段，72 天" src="site_src/assets/hero-light.svg">
+</picture>
 
 </div>
 
