@@ -1091,6 +1091,75 @@ def fig_queue_measured(p):
 
 
 
+
+# ------------------------------------------------ KV 块不够时的抢占
+def fig_preempt(p):
+    """三格连环画。触发抢占的是「正在跑的请求要不到新块」，不是新请求插队。
+
+    等待队列里的请求申请不到块时，调度器只是这一轮不调度它，不会去抢
+    正在跑的。会触发抢占的只有 running 队列那条循环。
+    """
+    W, H = 820, 560
+    CW, CH, GAP = 22, 20, 4
+    b = [_defs(p)]
+    b.append(text(24, 30, "谁会被抢占", fs(W, 1.06), p["fg"], weight="700"))
+    b.append(text(24, 52, "一个小方块 = 一段 KV 块，缓存总共 8 块。触发抢占的是正在跑的请求要不到新块",
+                  fs(W, .8), p["sub"]))
+
+    def row(x, y, name, used, color, want=0, ghost=0, note=""):
+        out = [text(x - 12, y + CH - 4, name, fs(W, .82), p["sub"], anchor="end", cls="m")]
+        n = used + want + ghost
+        for i in range(n):
+            cx = x + i * (CW + GAP)
+            if i < used:
+                out.append(f'<rect x="{cx}" y="{y}" width="{CW}" height="{CH}" rx="3" '
+                           f'fill="{color}" fill-opacity=".75"/>')
+            elif i < used + want:      # 这一步想要但还没拿到的块
+                out.append(f'<rect x="{cx}" y="{y}" width="{CW}" height="{CH}" rx="3" '
+                           f'fill="none" stroke="{AMBER}" stroke-width="1.6"/>')
+                out.append(text(cx + CW / 2, y + CH - 5, "?", fs(W, .8), AMBER,
+                                anchor="middle", cls="m"))
+            else:                      # 已释放
+                out.append(f'<rect x="{cx}" y="{y}" width="{CW}" height="{CH}" rx="3" '
+                           f'fill="none" stroke="{p["line"]}" stroke-dasharray="3 3"/>')
+        if note:
+            out.append(text(x + n * (CW + GAP) + 12, y + CH - 4, note,
+                            fs(W, .78), p["sub"], cls="s"))
+        return "".join(out)
+
+    PX, PY, PH = 116, 92, 148
+    panels = [
+        ("① 八块分完，R1 还要一块", [
+            ("R1", 3, GREEN, 1, 0, "生成到了块边界，这一步要第 4 块"),
+            ("R2", 3, GREEN, 0, 0, ""),
+            ("R3", 2, GREEN, 0, 0, "最后进入 running 的一条"),
+        ], "allocate_slots 返回 None：8 块已经分完，没有空闲块给 R1"),
+        ("② 从 running 队尾抢占", [
+            ("R1", 3, GREEN, 1, 0, ""),
+            ("R2", 3, GREEN, 0, 0, ""),
+            ("R3", 0, GREEN, 0, 2, "块被释放，num_computed_tokens 归零"),
+        ], "抢的是队尾，也就是最晚进入 running 的 R3；释放后再试一次分配"),
+        ("③ R1 拿到块，R3 回队首等", [
+            ("R1", 4, GREEN, 0, 0, "继续生成"),
+            ("R2", 3, GREEN, 0, 0, ""),
+            ("R3", 0, GREEN, 0, 0, "在等待队列的队首，下一轮从第 0 个 token 重算"),
+        ], "R3 之前算的那两块作废，这就是抢占的代价"),
+    ]
+    for k, (title, rows, note) in enumerate(panels):
+        y0 = PY + k * PH
+        b.append(text(24, y0 + 14, title, fs(W, .9), p["fg"], weight="600", cls="s"))
+        for i, (name, used, color, want, ghost, rnote) in enumerate(rows):
+            b.append(row(PX, y0 + 34 + i * (CH + 8), name, used, color, want, ghost, rnote))
+        b.append(text(PX - 12, y0 + 34 + 3 * (CH + 8) + 16, note, fs(W, .78), p["sub"], cls="s"))
+
+    b.append(text(24, H - 18,
+                  "等待队列里的新请求申请不到块时不会触发抢占，调度器只是这一轮跳过它。",
+                  fs(W, .78), p["sub"], cls="s"))
+    return svg(W, H, "".join(b), label=(
+        "抢占示意：正在跑的请求需要新块而缓存已满时，调度器从 running 队尾抢占一条，"
+        "释放它的块并把已算进度清零，它回到等待队列队首，下一轮从头重算"))
+
+
 def check_bounds(name: str, svg_text: str) -> list[str]:
     """粗估每段文字的宽度，报出超出画布的。
 
@@ -1132,7 +1201,8 @@ def main():
                      "fig-request-path": fig_request_path,
                      "fig-engine-step": fig_engine_step,
                      "fig-request-states": fig_request_states,
-                     "fig-queue-measured": fig_queue_measured}.items():
+                     "fig-queue-measured": fig_queue_measured,
+                     "fig-preempt": fig_preempt}.items():
         for suffix, pal in (("light", LIGHT), ("dark", DARK)):
             out = fn(pal)
             (OUT / f"{name}-{suffix}.svg").write_text(out)

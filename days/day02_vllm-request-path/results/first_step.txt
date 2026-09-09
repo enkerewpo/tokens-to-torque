@@ -1,0 +1,9 @@
+第一步的计数与提示长度的关系（max_tokens=1，各发一条）
+Qwen3.5-0.8B，--max-model-len 2048 --gpu-memory-utilization 0.04 --max-num-seqs 8
+
+ 提示 token 数   引擎步数   这一步的计数
+          13          1              14
+          20          1              21
+          50          1              51
+
+规律：第一步的计数 = 提示长度 + 1
