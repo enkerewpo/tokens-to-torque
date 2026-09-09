@@ -58,9 +58,9 @@ jobs:
         with:
           args: >-
             --no-progress
-            --max-retries 3
-            --retry-wait-time 10
-            --timeout 30
+            --max-retries 5
+            --retry-wait-time 15
+            --timeout 60
             --accept 200..=299,403,429
             --exclude "^https?://(localhost|127\.0\.0\.1|100\.6[4-9]\.|100\.[7-9][0-9]\.|100\.1[01][0-9]\.|100\.12[0-7]\.|192\.168\.)"
             --exclude "github\.com/.*/(stargazers|discussions)$"
