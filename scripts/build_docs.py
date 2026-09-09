@@ -102,6 +102,19 @@ def rewrite_links(text: str, in_day: bool, in_sub: bool = None) -> str:
                   r'<img class="([a-z]+)" alt="([^"]*)" src="(?:\.\./)*site_src/(assets/[^"]+)">\s*'
                   r'</picture>', _inline_svg, text)
 
+    # 上面那条只处理插图（class="fig" / "hero"，会被内联成 SVG）。剩下的 <picture>
+    # 不能原样留着：它按**系统**的深色偏好选图，而站点主题是页面自己切的，
+    # 两者不一致时就会出现浅色页面配深色版图片。改成两张 img，交给 Quarto 的
+    # .light-content / .dark-content 按站点主题显示。
+    def _theme_imgs(m):
+        dark, pre, light, post = m.group(1), m.group(2), m.group(3), m.group(4)
+        return (f'<img class="light-content"{pre}src="{light}"{post}>'
+                f'<img class="dark-content"{pre}src="{dark}"{post}>')
+
+    text = re.sub(r'<picture>\s*<source media="\(prefers-color-scheme: dark\)" '
+                  r'srcset="([^"]+)">\s*<img([^>]*?)src="([^"]+)"([^>]*?)>\s*</picture>',
+                  _theme_imgs, text)
+
     # 图片资源在 site_src/assets/：源码里可能写成 site_src/… 或 ../site_src/…，
     # 统一改成相对站点的 assets/…（子目录页面要加 ../）
     text = re.sub(r"\]\((?:\.\./)*site_src/(assets/[^)]*)\)",
