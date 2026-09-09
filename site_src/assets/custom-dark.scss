@@ -65,15 +65,15 @@ code:not(.sourceCode) {
 /* 边框只画最外层。内外各画一层的话，横向滚动时能看到里面那层的边跟着动，
    看起来像多出一个浅框。 */
 div.sourceCode {
-  border: 1px solid #3A404A;
+  border: 1px solid #3A3F46;
   border-radius: 8px;
-  background: #1B1F26;
+  background: #1B1E23;
 }
 div.sourceCode > pre { border: 0; border-radius: 0; background: transparent; }
 pre:not(.mermaid):not(div.sourceCode > pre) {
-  border: 1px solid #3A404A;
+  border: 1px solid #3A3F46;
   border-radius: 8px;
-  background: #1B1F26;
+  background: #1B1E23;
 }
 /* 右边留出复制按钮的位置，否则按钮压在代码上 */
 div.sourceCode pre, pre > code {
@@ -104,13 +104,13 @@ pre.numberSource code > span > a:first-child::before {
   width: 3.4em;
   padding-right: 1em;
   text-align: right;
-  color: #5A626E;
+  color: #7D8590;
   user-select: none;
 }
 
 /* ---- 源码卡片：GitHub 图标 + 路径 + 行号 + 跳转 ---- */
 .srccard {
-  border: 1px solid #3A404A;
+  border: 1px solid #3A3F46;
   border-radius: 8px;
   overflow: hidden;
   margin: 1.3rem 0;
@@ -120,8 +120,8 @@ pre.numberSource code > span > a:first-child::before {
   align-items: center;
   gap: .5rem;
   padding: .5rem .8rem;
-  background: #20242B;
-  border-bottom: 1px solid #3A404A;
+  background: #23262B;
+  border-bottom: 1px solid #3A3F46;
   font-family: $font-family-monospace;
   font-size: .8rem;
 }
@@ -152,5 +152,12 @@ pre.numberSource code > span > a:first-child::before {
   margin: 0;
   border: 0;
   border-radius: 0;
-  background: #1B1F26;
+  background: #1B1E23;
+}
+
+/* 行内代码：浅色主题下是紫色，暗色下别丢掉这个强调色，
+   否则和正文一样白，看不出是代码。 */
+.quarto-dark :not(pre) > code, body.quarto-dark :not(pre) > code {
+  color: #D2A8FF;
+  background: rgba(110, 118, 129, .28);
 }
